@@ -1,6 +1,8 @@
-# AutoControl — Distributed File & Script Management
+# Distributed Automation Job Management Platform (AutoControl)
 
 > Flask **controller** + lightweight Windows **worker agents** for scheduling, running, and monitoring automation scripts across LAN PCs — from one web dashboard.
+
+GitHub: [Priyansh-Gondaliya/Distributed-Automation-Job-Management-Platform](https://github.com/Priyansh-Gondaliya/Distributed-Automation-Job-Management-Platform)
 
 The controller **never executes** automation scripts. Workers poll for jobs/commands and run everything locally.
 
@@ -24,6 +26,8 @@ The controller **never executes** automation scripts. Workers poll for jobs/comm
 - [Troubleshooting](#troubleshooting)
 - [Security](#security)
 - [Docs & Tests](#docs--tests)
+- [Adding Scripts](#adding-scripts)
+- [Import schedules from System Scheduler](#import-schedules-from-system-scheduler)
 
 ---
 
@@ -107,6 +111,7 @@ Distributed file management/
 │   ├── services/
 │   │   ├── scheduler.py         # Background due-schedule runner
 │   │   ├── schedule_folders.py  # Multi-script folder runs
+│   │   ├── schedule_imports.py  # System Scheduler INI import
 │   │   └── chat_notify.py       # Schedule Tracking → Chat API
 │   ├── templates/         # Jinja2 HTML
 │   └── static/            # css / js / img
@@ -207,7 +212,7 @@ From the repo (controller + test worker windows):
 | **Home / Workers** | Online/offline, busy/idle, open detail |
 | **Worker detail** | File Explorer (live FS sync), config path, jobs |
 | **File IDE** | Remote read/write editor + change ledger / diffs |
-| **Scheduler** | Schedules, folders, job history, view-other-user |
+| **Scheduler** | Schedules, folders, job history, **Import** (System Scheduler `.INI`), view-other-user |
 | **Reports** | Execution history, Schedule Tracking (admin), watchlist |
 | **Permissions / Users** | PC grants, schedule grants, user admin |
 | **Global History** | Audit / file history |
@@ -279,6 +284,7 @@ Schema review helpers: `postgres/`.
 | `AUTOMATION_ROOT` | `C:\Automation` | Root |
 | `SCRIPTS_DIR` | `…\scripts` | Script scan folder |
 | `OUTPUT_DIR` | `…\results` | Optional outputs |
+| `SCHEDULE_IMPORT_DIR` | `…\dfms_schedule_import` | Drop System Scheduler `.INI` backups (scan on Import only) |
 | `MAX_CONCURRENT_JOBS` | `0` | `0` = unlimited |
 
 ---
@@ -347,6 +353,16 @@ python postgres\smoke_dashboard.py
 
 ---
 
+## Import schedules from System Scheduler
+
+1. On the worker PC, copy System Scheduler `.INI` backups into
+   `C:\Automation\dfms_schedule_import` (created on worker start; override with `SCHEDULE_IMPORT_DIR`).
+2. In the dashboard: **Scheduler → Import** → select worker → **Scan folder**.
+3. Review script, path, time, type, and status; select rows → **Import selected**.
+4. Valid paths not yet in DFMS are registered automatically on import. Already-scheduled paths show **Scheduled**.
+
+Nothing is read until you click Scan. The worker only reads `.INI` files inside the import folder.
+
+---
+
 *Start the controller with `python run.py`. Deploy only `worker_agent/worker.py` to worker PCs.*
-#   D i s t r i b u t e d - A u t o m a t i o n - J o b - M a n a g e m e n t - P l a t f o r m  
- 
