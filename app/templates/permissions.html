@@ -1,0 +1,624 @@
+{% extends "base.html" %}
+
+{% block title %}Permissions · AutoControl{% endblock %}
+{% block page_title %}Access Control{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/permissions.css') }}?v=sch-card-ux-2">
+
+<div class="permissions-page permissions-page-wrapper">
+    <div class="perm-hero">
+        <div>
+            <p class="perm-kicker">Administration</p>
+            <h2>Permissions</h2>
+            <p class="perm-lede">
+                Choose a user, grant the access they need, then save.
+                Active grants show extra access already assigned to non-owners.
+            </p>
+        </div>
+        <div class="perm-stats" aria-hidden="true">
+            <div class="perm-stat"><b>{{ users|length }}</b><span>Users</span></div>
+            <div class="perm-stat"><b>{{ workers|length }}</b><span>Workers</span></div>
+            <div class="perm-stat"><b>{{ (pc_access or [])|length }}</b><span>PC grants</span></div>
+            <div class="perm-stat"><b>{{ (script_access or [])|length }}</b><span>Script grants</span></div>
+        </div>
+    </div>
+
+    <div class="tabs-wrapper">
+        <div class="tabs-list" role="tablist">
+            <button type="button" class="tab-trigger active" onclick="switchTab('bulk-assign')" role="tab" aria-selected="true">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                Assign access
+            </button>
+            <button type="button" class="tab-trigger" onclick="switchTab('active-grants')" role="tab" aria-selected="false">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 11l3 3L22 4" />
+                    <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+                </svg>
+                Active grants
+            </button>
+        </div>
+    </div>
+
+    <!-- Bulk Permission Assignment Tab -->
+    <div id="tab-bulk-assign" class="tab-content" role="tabpanel">
+        <form id="assign-permissions-form" action="{{ url_for('web.permissions') }}" method="post">
+                <input type="hidden" name="action" value="assign_permissions">
+
+            <div class="perm-sticky-bar">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="control-label" for="user-select">Target user</label>
+                    <select name="user_id" id="user-select" class="field-select" required
+                        onchange="populatePermissions()">
+                        <option value="">Select user…</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}" data-role="{{ user.role }}">{{ user.username }} ({{ user.role }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="perm-user-meta" class="perm-user-meta">
+                    Select a user to load their current grants. Changes apply only after you save.
+                </div>
+                <button type="submit" class="btn-action btn-solid-primary" id="perm-save-btn">
+                    Save permissions
+                </button>
+                </div>
+
+            <div class="perm-grant-grid grid-assign">
+                <div class="perm-card is-grant">
+                    <div class="perm-card-head">
+                        <div class="perm-card-title">
+                            <div class="perm-section-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <rect x="2" y="3" width="20" height="14" rx="3" />
+                                    <path d="M8 21h8M12 17v4" />
+                                </svg>
+                            </div>
+                    <div>
+                                <label class="control-label" style="margin-bottom: 0.15rem;">Grant Worker Access</label>
+                                <p class="sec-desc">PC access, allowed paths, and File Explorer actions.</p>
+                            </div>
+                        </div>
+                        <span id="workers-count-label" class="perm-count"></span>
+                    </div>
+                        <div class="search-input-wrapper">
+                            <span class="search-icon">🔍</span>
+                        <input type="text" class="field-input" placeholder="Search workers…"
+                                onkeyup="filterList(this, 'workers-list')">
+                        </div>
+                        <div id="workers-list" class="scrollable-list">
+                            {% for worker in workers %}
+                            <div class="filter-item list-item">
+                                <label class="item-label">
+                                    <input type="checkbox" name="workers" value="{{ worker.worker_name }}"
+                                        class="item-checkbox"
+                                    data-owner-id="{{ worker.owner_id if worker.owner_id is not none else '' }}"
+                                    onchange="onWorkerAccessToggle(this, 'worker-perms-{{ loop.index }}')">
+                                    <span class="item-text">{{ worker.worker_name }}</span>
+                                </label>
+
+                                <div id="worker-perms-{{ loop.index }}" class="sub-drawer" style="display: none;">
+                                    <div class="form-group">
+                                    <label class="control-label">Allowed Paths (comma-sep)</label>
+                                        <input type="text" name="worker_{{ worker.worker_name }}_paths"
+                                        class="field-input" placeholder="e.g. reports, scripts/daily">
+                                    <small class="field-hint">
+                                        Relative to the worker script root (not absolute disk paths). Leave blank for all paths.
+                                    </small>
+                                    </div>
+
+                                <div class="form-group" style="margin-bottom: 0.75rem;">
+                                    <label class="control-label">Allowed Extensions (comma-sep)</label>
+                                        <input type="text" name="worker_{{ worker.worker_name }}_exts"
+                                        class="field-input" placeholder="e.g. .py,.txt">
+                                    </div>
+
+                                <div class="perm-pill-block">
+                                    <div class="sub-drawer-title">Folders</div>
+                                    <div class="pill-checkbox-group">
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_create_folder" value="1"> Create
+                                            Folder</label>
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_rename_folder" value="1"> Rename
+                                            Folder</label>
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_delete_folder" value="1"> Delete
+                                            Folder</label>
+                                    </div>
+                                </div>
+
+                                <div class="perm-pill-block">
+                                    <div class="sub-drawer-title">Files</div>
+                                    <div class="pill-checkbox-group">
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_create_file" value="1">
+                                            Upload File</label>
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_rename_file" value="1"> Rename
+                                            File</label>
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_edit_file" value="1"> Edit
+                                            File</label>
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_update_file" value="1"> Update
+                                            File</label>
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_delete_file" value="1"> Delete
+                                            File</label>
+                        </div>
+                    </div>
+
+                                <div class="perm-pill-block">
+                                    <div class="sub-drawer-title">Worker Permissions</div>
+                                    <div class="pill-checkbox-group">
+                                        <label class="pill-checkbox"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_run" value="1"> Run
+                                            Script</label>
+                                        <label class="pill-checkbox is-danger"><input type="checkbox"
+                                                name="worker_{{ worker.worker_name }}_access_all_files" value="1"
+                                                style="accent-color: var(--perm-danger);"> <strong
+                                                style="color: var(--perm-danger);">All Files Access</strong></label>
+                                        <small class="field-hint" style="flex-basis:100%;">
+                                            Unrestricted File Explorer (all CRUD + Run, ignore path/extension limits) and full script run/update/delete on this worker.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="empty-state">No workers registered.</div>
+                            {% endfor %}
+                    </div>
+                </div>
+
+                <div class="perm-card is-grant">
+                    <div class="perm-card-head">
+                        <div class="perm-card-title">
+                            <div class="perm-section-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                            </div>
+                            <div>
+                                <label class="control-label" style="margin-bottom: 0.15rem;">Grant Script Access <span id="scripts-count-label" class="perm-count"></span></label>
+                                <p class="sec-desc">Run, update, or delete individual Python (.py) scripts.</p>
+                            </div>
+                        </div>
+                    </div>
+                        <div class="search-input-wrapper">
+                            <span class="search-icon">🔍</span>
+                        <input type="text" id="scripts-search" class="field-input" placeholder="Search scripts…"
+                            oninput="filterCatalogList('scripts')">
+                    </div>
+                    <div id="scripts-list" class="scrollable-list">
+                        <div class="empty-state">Loading scripts…</div>
+                        </div>
+                    <div id="scripts-selected-payload"></div>
+                                    </div>
+
+                <div class="perm-card is-grant is-schedule-grant">
+                    <div class="perm-card-head">
+                        <div class="perm-card-title">
+                            <div class="perm-section-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 6v6l4 2" />
+                                </svg>
+                            </div>
+                            <div>
+                                <label class="control-label" style="margin-bottom: 0.15rem;">
+                                    Grant Schedule Access
+                                    <span id="schedules-count-label" class="perm-count"></span>
+                                </label>
+                                <p class="sec-desc">
+                                    Grouped by schedule owner. Expand a user, tick schedules, set actions below, then save.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sch-toolbar">
+                        <div class="search-input-wrapper sch-search">
+                            <span class="search-icon" aria-hidden="true">🔍</span>
+                            <input type="text" id="schedules-search" class="field-input"
+                                placeholder="Search by owner, script, or schedule id…"
+                                oninput="filterCatalogList('schedules')"
+                                autocomplete="off">
+                        </div>
+                        <label class="perm-select-all sch-select-all" for="schedules-select-all">
+                            <input type="checkbox" id="schedules-select-all"
+                                onchange="toggleSelectAllCatalog('schedules', this)">
+                            <span>Select all <span id="schedules-select-all-hint">visible</span></span>
+                        </label>
+                    </div>
+
+                    <div id="schedules-list" class="scrollable-list sch-list">
+                        <div class="empty-state">Loading schedules…</div>
+                    </div>
+
+                    <div id="schedule-actions-panel" class="schedule-actions-panel sch-actions" hidden>
+                        <div class="sch-actions-head">
+                            <div>
+                                <div class="sub-drawer-title">Schedule actions</div>
+                                <p id="schedule-actions-selection-hint" class="sec-desc sch-actions-hint"></p>
+                            </div>
+                        </div>
+                        <div class="pill-checkbox-group sch-actions-pills">
+                            <label class="pill-checkbox"><input type="checkbox" id="sch-act-enable" value="1"> Enable / Disable</label>
+                            <label class="pill-checkbox"><input type="checkbox" id="sch-act-run" value="1" checked> Run</label>
+                            <label class="pill-checkbox"><input type="checkbox" id="sch-act-edit" value="1"> Edit</label>
+                            <label class="pill-checkbox"><input type="checkbox" id="sch-act-duplicate" value="1"> Duplicate</label>
+                            <label class="pill-checkbox is-danger"><input type="checkbox" id="sch-act-delete" value="1"> Delete</label>
+                        </div>
+                    </div>
+                    <div id="schedules-selected-payload"></div>
+                </div>
+
+                <div class="perm-card is-grant">
+                    <div class="perm-card-head">
+                        <div class="perm-card-title">
+                            <div class="perm-section-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <label class="control-label" style="margin-bottom: 0.15rem;">Grant Folder Scheduler Access <span id="folders-count-label" class="perm-count"></span></label>
+                                <p class="sec-desc">
+                                    Edit Folder, Delete Folder, and Enable/Disable Folder are folder-level grants.
+                                    Delete Folder stays off unless you check it.
+                                    Scripts inside a folder use the same Schedule Access permissions above — do not create duplicate script grants.
+                                </p>
+                </div>
+        </div>
+    </div>
+                    <div class="search-input-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="folders-search" class="field-input" placeholder="Search folders…"
+                            oninput="filterCatalogList('folders')">
+                    </div>
+                    <div id="folders-list" class="scrollable-list folders-list">
+                        <div class="empty-state">No folders.</div>
+                    </div>
+                    <div id="folders-selected-payload"></div>
+            </div>
+
+                <div class="perm-card is-grant is-wide">
+                    <div class="perm-card-head">
+                        <div class="perm-card-title">
+                            <div class="perm-section-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <label class="control-label" style="margin-bottom: 0.15rem;">Scheduler Days</label>
+                                <p class="sec-desc">
+                                    Show and use the Days column, bulk Set Days, and the create/edit Days field on the Scheduler page.
+                                    Without this, Days UI is hidden and days values are not applied. Admins always have this permission.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pill-checkbox-group" style="padding: 0 0.25rem 0.25rem;">
+                        <label class="pill-checkbox" id="can-set-days-label">
+                            <input type="checkbox" name="can_set_days" id="can-set-days-cb" value="1">
+                            Set Days
+                        </label>
+                        <p id="can-set-days-admin-hint" class="sec-desc" style="display:none; margin: 0.35rem 0 0; flex-basis: 100%;">
+                            Admins always have Set Days. This checkbox is not needed.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="perm-card is-grant is-wide">
+                    <div class="perm-card-head">
+                        <div class="perm-card-title">
+                            <div class="perm-section-icon" aria-hidden="true">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                            </div>
+                            <div>
+                                <label class="control-label" style="margin-bottom: 0.15rem;">View Other Users' Scheduler Data <span id="scheduler-view-users-count-label" class="perm-count"></span></label>
+                                <p class="sec-desc">
+                                    Allow this user to select another user on the Scheduler page and view that user's Schedules, Folders, and Job History.
+                                    That data stays read-only unless you also grant item permissions above.
+                                    Admins can always view every user's scheduler data.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <p id="scheduler-view-users-admin-hint" class="sec-desc" style="display:none; margin: 0 0 0.75rem;">
+                        Admins already have access to all users' scheduler data. These grants are not needed.
+                    </p>
+                    <div class="search-input-wrapper" style="max-width: 420px;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="scheduler-view-users-search" class="field-input" placeholder="Search users…"
+                            oninput="filterSchedulerViewUsers(this)">
+                    </div>
+                    <div id="scheduler-view-users-list" class="scrollable-list" style="max-height: 240px;">
+                        {% for user in users if user.role != 'admin' %}
+                        <label class="filter-item list-item scheduler-view-user-row" data-user-id="{{ user.id }}"
+                            style="display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.6rem;">
+                            <input type="checkbox" name="scheduler_view_users" value="{{ user.id }}" class="scheduler-view-user-cb">
+                            <span class="item-text">{{ user.username }}</span>
+                        </label>
+                        {% else %}
+                        <div class="empty-state">No non-admin users to grant.</div>
+                            {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Active Grants Tab -->
+    <div id="tab-active-grants" class="tab-content" style="display: none;" role="tabpanel">
+        <div class="perm-grants-toolbar">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="field-input" placeholder="Filter grants by user, worker, or script…"
+                    oninput="filterGrantTables(this)">
+            </div>
+        </div>
+        <div class="grid-ownership">
+            <div class="dashboard-card perm-card" style="padding: 1.15rem 0.65rem 0.65rem;">
+                <div style="padding: 0 0.7rem 0.65rem;">
+                    <h3 class="sec-title">Extra PC Grants</h3>
+                    <p class="sec-desc">Active machine permissions assigned to non-owners.</p>
+                </div>
+                <div class="table-container">
+                    <table class="modern-table perm-grant-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Worker PC</th>
+                                <th style="text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for access in pc_access %}
+                            <tr>
+                                <td style="font-weight: 550;">{{ access.username }}</td>
+                                <td><span class="badge-modern">{{ access.worker_name }}</span></td>
+                                <td style="text-align: right;">
+                                    <form action="{{ url_for('web.revoke_pc_access') }}" method="post"
+                                        style="display: inline;">
+                                        <input type="hidden" name="user_id" value="{{ access.user_id }}">
+                                        <input type="hidden" name="worker_name" value="{{ access.worker_name }}">
+                                        <button type="submit" class="btn-action btn-outline-danger">Revoke</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="empty-state">No extra PC access grants active.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-card perm-card" style="padding: 1.15rem 0.65rem 0.65rem;">
+                <div style="padding: 0 0.7rem 0.65rem;">
+                    <h3 class="sec-title">Extra Script Grants</h3>
+                    <p class="sec-desc">Active script permissions assigned to non-owners.</p>
+                </div>
+                <div class="table-container">
+                    <table class="modern-table perm-grant-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Worker / Script</th>
+                                <th style="text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for access in script_access %}
+                            <tr>
+                                <td style="font-weight: 550;">{{ access.username }}</td>
+                                <td>
+                                    <span class="badge-modern" style="margin-right: 0.25rem;">{{ access.worker_name
+                                        }}</span>
+                                    <span style="font-size: 0.85rem; color: var(--perm-muted);">{{ access.script_name
+                                        }}</span>
+                                </td>
+                                <td style="text-align: right;">
+                                    <form action="{{ url_for('web.revoke_script_access') }}" method="post"
+                                        style="display: inline;">
+                                        <input type="hidden" name="user_id" value="{{ access.user_id }}">
+                                        <input type="hidden" name="script_id" value="{{ access.script_id }}">
+                                        <button type="submit" class="btn-action btn-outline-danger">Revoke</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="empty-state">No extra script access grants active.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-card perm-card is-wide schedule-grants-card" id="schedule-grants-card">
+                <div class="schedule-grants-head">
+                    <div>
+                        <h3 class="sec-title">Schedule Grants</h3>
+                        <p class="sec-desc">Extra schedule access for non-owners. Change grants from Assign access, or revoke here.</p>
+                    </div>
+                    <span class="perm-count" id="schedule-grants-count-label" aria-live="polite"></span>
+                </div>
+                <div class="schedule-grants-toolbar">
+                    <div class="search-input-wrapper">
+                        <span class="search-icon" aria-hidden="true">🔍</span>
+                        <input type="text" id="schedule-grants-search" class="field-input"
+                            placeholder="Search user, script, worker, or schedule #…"
+                            autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+                <div class="table-container schedule-grants-table-wrap">
+                    <table class="modern-table perm-grant-table" id="schedule-grants-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Schedule</th>
+                                <th>Permissions</th>
+                                <th style="text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-grants-tbody">
+                            {% for access in schedule_access %}
+                            <tr class="schedule-grant-row"
+                                data-search="{{ access.username }} {{ access.script_name }} {{ access.worker_name }} {{ access.owner_username }} #{{ access.schedule_id }} {{ access.run_time }}">
+                                <td>
+                                    <span class="sg-user">{{ access.username }}</span>
+                                </td>
+                                <td>
+                                    <div class="sg-schedule">
+                                        <div class="sg-schedule-title">
+                                            <span class="badge-modern">#{{ access.schedule_id }}</span>
+                                            <span class="sg-script">{{ access.script_name or '—' }}</span>
+                                        </div>
+                                        <div class="sg-schedule-meta">
+                                            {% if access.worker_name %}<span>{{ access.worker_name }}</span>{% endif %}
+                                            {% if access.owner_username %}<span>Owner: {{ access.owner_username }}</span>{% endif %}
+                                            {% if access.run_time %}<span class="sg-time">{{ access.run_time }}</span>{% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="perm-flags">
+                                        <span class="perm-flag {% if access.can_enable %}on{% endif %}">Enable</span>
+                                        <span class="perm-flag {% if access.can_run %}on{% endif %}">Run</span>
+                                        <span class="perm-flag {% if access.can_edit %}on{% endif %}">Edit</span>
+                                        <span class="perm-flag {% if access.can_duplicate %}on{% endif %}">Dup</span>
+                                        <span class="perm-flag {% if access.can_delete %}on{% endif %} danger">Delete</span>
+                                    </div>
+                                </td>
+                                <td style="text-align: right;">
+                                    <form action="{{ url_for('web.revoke_schedule_access') }}" method="post"
+                                        style="display: inline;"
+                                        onsubmit="return confirm('Revoke schedule #{{ access.schedule_id }} access for {{ access.username }}?');">
+                                        <input type="hidden" name="user_id" value="{{ access.user_id }}">
+                                        <input type="hidden" name="schedule_id" value="{{ access.schedule_id }}">
+                                        <button type="submit" class="btn-action btn-outline-danger">Revoke</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="schedule-grants-empty-row" {% if schedule_access %}style="display:none"{% endif %}>
+                                <td colspan="4" class="empty-state" id="schedule-grants-empty-msg">
+                                    {% if schedule_access %}No matching schedule grants.{% else %}No extra schedule grants active.{% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination schedule-grants-pagination" id="schedule-grants-pagination" style="display: none;">
+                    <div class="pagination-info">
+                        Showing <span class="page-start">1</span>–<span class="page-end">10</span>
+                        of <span class="page-total">0</span>
+                        <select class="field-select page-size-select" aria-label="Rows per page">
+                            <option value="5">5 / page</option>
+                            <option value="10" selected>10 / page</option>
+                            <option value="25">25 / page</option>
+                            <option value="50">50 / page</option>
+                        </select>
+                    </div>
+                    <div class="pagination-controls"></div>
+                </div>
+            </div>
+
+            <div class="dashboard-card perm-card" style="padding: 1.15rem 0.65rem 0.65rem;">
+                <div style="padding: 0 0.7rem 0.65rem;">
+                    <h3 class="sec-title">Folder Scheduler Grants</h3>
+                    <p class="sec-desc">Folder-level access. Change these from Assign access.</p>
+                </div>
+                <div class="table-container">
+                    <table class="modern-table perm-grant-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Folder</th>
+                                <th>Flags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for access in folder_access %}
+                            <tr>
+                                <td style="font-weight: 550;">{{ access.username }}</td>
+                                <td>{{ access.folder_name or ('#' ~ access.folder_id) }}</td>
+                                <td>
+                                    <div class="perm-flags">
+                                        <span class="perm-flag {% if access.can_edit %}on{% endif %}">Edit</span>
+                                        <span class="perm-flag {% if access.can_enable or access.can_disable %}on{% endif %}">Enable</span>
+                                        <span class="perm-flag {% if access.can_run %}on{% endif %}">Run</span>
+                                        <span class="perm-flag {% if access.can_delete %}on{% endif %}">Delete</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="empty-state">No extra folder grants active.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard-card perm-card is-wide" style="padding: 1.15rem 0.65rem 0.65rem; grid-column: 1 / -1;">
+                <div style="padding: 0 0.7rem 0.65rem;">
+                    <h3 class="sec-title">Scheduler View Grants</h3>
+                    <p class="sec-desc">Users allowed to view another user's scheduler data.</p>
+                </div>
+                <div class="table-container">
+                    <table class="modern-table perm-grant-table">
+                        <thead>
+                            <tr>
+                                <th>Viewer</th>
+                                <th>Can view</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for access in scheduler_view_access %}
+                            <tr>
+                                <td style="font-weight: 550;">{{ access.viewer_username }}</td>
+                                <td>{{ access.target_username }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="empty-state">No scheduler view grants active.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="script-access-data" type="application/json">{{ (script_access or [])|tojson }}</script>
+<script id="schedule-access-data" type="application/json">{{ (schedule_access_assign or schedule_access or [])|tojson }}</script>
+<script id="folder-access-data" type="application/json">{{ (folder_access or [])|tojson }}</script>
+<script id="scheduler-view-access-data" type="application/json">{{ (scheduler_view_access or [])|tojson }}</script>
+<script id="users-can-set-days-data" type="application/json">{{ (users_can_set_days or {})|tojson }}</script>
+<script id="pc-access-data" type="application/json">{{ (pc_access or [])|tojson }}</script>
+<script id="scripts-catalog-data" type="application/json">{{ (scripts_catalog or [])|tojson }}</script>
+<script id="schedules-catalog-data" type="application/json">{{ (schedules_catalog or [])|tojson }}</script>
+<script id="folders-catalog-data" type="application/json">{{ (folders_catalog or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/permissions.js') }}?v=sch-card-ux-2"></script>
+{% endblock %}

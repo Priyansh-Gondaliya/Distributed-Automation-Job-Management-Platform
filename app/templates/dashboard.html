@@ -1,0 +1,715 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · AutoControl{% endblock %}
+{% block page_title %}Home{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+
+<div class="home-dash">
+    <!-- Stats -->
+    <section class="home-stats" id="stats-bar" aria-label="Platform status">
+        <div class="home-stat">
+            <span class="home-stat-label">Workers</span>
+            <span class="home-stat-value" id="stat-total-workers">{{ workers|length }}</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-label">Online</span>
+            <span class="home-stat-value is-online" id="stat-online-workers">{{ online_count }}</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-label">Running</span>
+            <span class="home-stat-value is-run" id="stat-running">{{ job_counts.running }}</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-label">Pending</span>
+            <span class="home-stat-value is-wait" id="stat-pending">{{ job_counts.pending }}</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-label">Completed</span>
+            <span class="home-stat-value is-ok" id="stat-completed">{{ job_counts.completed }}</span>
+        </div>
+        <div class="home-stat">
+            <span class="home-stat-label">Failed</span>
+            <span class="home-stat-value is-bad" id="stat-failed">{{ job_counts.error }}</span>
+        </div>
+    </section>
+
+    <!-- Filters -->
+    <section class="home-toolbar" aria-label="Filters">
+        <form class="search-form" method="get" action="{{ url_for('web.dashboard') }}">
+            <div class="home-field">
+                <label for="status-filter">Job status</label>
+                <select name="status" class="home-select status-select" id="status-filter">
+                    <option value="">All statuses</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="running" {% if status_filter == 'running' %}selected{% endif %}>Running</option>
+                    <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="error" {% if status_filter == 'error' %}selected{% endif %}>Error</option>
+                    <option value="stopped" {% if status_filter == 'stopped' %}selected{% endif %}>Stopped</option>
+                </select>
+            </div>
+            <div class="home-field home-search">
+                <label for="script-search">Search scripts</label>
+                <input type="search" id="script-search" class="home-input" placeholder="Name or worker…" autocomplete="off">
+            </div>
+            <div class="home-field">
+                <label for="worker-filter">Worker</label>
+                <select id="worker-filter" class="home-select">
+                    <option value="">All workers</option>
+                    {% for worker in workers %}
+                    <option value="{{ worker.worker_name }}">{{ worker.worker_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="home-toolbar-actions" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-home-primary btn-sm">Apply</button>
+                <a href="{{ url_for('web.dashboard') }}" class="btn btn-ghost btn-sm">Clear</a>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh" title="Refresh">
+                    Refresh
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Workers -->
+    <section class="home-panel" id="workers-section">
+        <div class="home-panel-head">
+            <h2 class="home-panel-title">Workers <span class="badge badge-muted" id="worker-count">{{ workers|length }}</span></h2>
+        </div>
+        <div class="home-panel-body">
+            <div class="home-workers card-grid" id="worker-grid">
+                {% for worker in workers %}
+                <article class="home-worker card worker-card" data-worker="{{ worker.worker_name }}">
+                    <div class="home-worker-top card-top">
+                        <h3 class="home-worker-name"><a href="{{ url_for('web.worker_detail', ip_address=worker.ip_address) }}">{{ worker.worker_name }}</a></h3>
+                        <div class="worker-badges">
+                            <span class="badge badge-{{ worker.status }}">{{ worker.status }}</span>
+                            {% if worker.status == 'online' %}
+                            <span class="badge badge-{{ 'primary' if worker.state == 'busy' else 'muted' }} worker-state">{{ worker.state }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <dl class="home-worker-meta meta">
+                        <dt>IP</dt>
+                        <dd>{{ worker.ip_address or '—' }}</dd>
+                        <dt>Owner</dt>
+                        <dd>{{ worker.username or '—' }}</dd>
+                        <dt>Last seen</dt>
+                        <dd class="last-seen">{{ worker.last_seen|human_dt if worker.last_seen else 'Never' }}</dd>
+                    </dl>
+                    <div class="home-worker-actions card-actions">
+                        <a href="{{ url_for('web.worker_detail', ip_address=worker.ip_address) }}" class="btn btn-ghost btn-sm">Open details →</a>
+                    </div>
+                </article>
+                {% else %}
+                <p class="home-empty empty">No workers available.
+                    {% if current_user.role != 'admin' %}Ask admin to grant you PC access.
+                    {% else %}Start a worker agent on a PC.{% endif %}
+                </p>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Scripts -->
+    <section class="home-panel" id="scripts-section">
+        <div class="home-panel-head">
+            <h2 class="home-panel-title">Starred scripts <span class="badge badge-muted" id="starred-script-count">{{ starred_script_count }}</span></h2>
+            <span style="font-size:0.78rem;color:var(--text-muted);">From File Explorer ★ — not the full catalog</span>
+        </div>
+        <style id="initial-pagination-style">
+            #scripts-table-body tr:nth-child(n+11) { display: none !important; }
+        </style>
+        <div class="home-panel-body flush">
+            <div class="home-table-wrap table-wrap">
+                <table class="home-table jobs-table">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>User</th>
+                            <th>Worker</th>
+                            <th>Days</th>
+                            <th>Last run</th>
+                            <th>Next run</th>
+                            <th>Log</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scripts-table-body">
+                        {% for worker_name, worker_scripts in scripts_by_worker.items() %}
+                        {% for script in worker_scripts %}
+                        <tr class="script-row"
+                            data-script-name="{{ script.script_name|lower }}"
+                            data-worker-name="{{ script.worker_name|lower }}">
+                            <td><span class="script-name">{{ script.script_name }}</span></td>
+                            <td>{{ script.username or '—' }}</td>
+                            <td>{{ script.worker_name }}</td>
+                            <td>
+                                {% if script.days is not none %}
+                                <input type="number" class="form-input days-input" data-script-id="{{ script.id }}"
+                                    value="{{ script.days }}" min="0">
+                                {% else %}
+                                <span class="badge badge-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td class="mono">{{ script.last_run or 'Never' }}</td>
+                            <td class="mono">{{ script.next_run or 'None' }}</td>
+                            <td>
+                                {% if script.log_status %}
+                                <span class="badge badge-{{ script.log_status }}">{{ script.log_status }}</span>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td class="actions">
+                                <form action="{{ url_for('web.run_script') }}" method="post" class="inline-form">
+                                    <input type="hidden" name="script_id" value="{{ script.id }}">
+                                    <button type="submit" class="btn btn-run btn-sm"
+                                        {% if current_user.role != 'admin' and not script.can_run %}disabled{% endif %}>▶ Run</button>
+                                </form>
+                                <a href="{{ url_for('web.scheduler', selected_script=script.id) }}"
+                                    class="btn btn-ghost btn-sm"
+                                    {% if current_user.role != 'admin' and not script.can_run %}style="pointer-events:none;opacity:0.5;"{% endif %}>Schedule</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr class="empty">
+                            <td colspan="8" class="home-empty">No starred scripts yet.
+                                Open a worker → File Explorer, star files with ★, then refresh Home.
+                                {% if current_user.role != 'admin' %}Only scripts you can access will appear.{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="home-pagination pagination" id="scripts-pagination">
+                <div class="home-pagination-left">
+                    <div class="pagination-info">
+                        Showing <span class="page-start">1</span>–<span class="page-end">10</span> of <span class="page-total">0</span>
+                    </div>
+                    <select class="page-size-select" aria-label="Scripts per page">
+                        <option value="10" selected>10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                        <option value="100">100 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Jobs -->
+    <section class="home-panel" id="jobs-section">
+        <div class="home-panel-head">
+            <h2 class="home-panel-title">Job history <span class="badge badge-muted" id="job-count">{{ jobs|length }}</span></h2>
+        </div>
+        <div class="home-panel-body flush">
+            <div class="home-table-wrap table-wrap">
+                <table class="home-table jobs-table" id="jobs-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Worker</th>
+                            <th>Script</th>
+                            <th>Date / time</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-tbody">
+                        {% for job in jobs %}
+                        <tr class="job-row" data-job-id="{{ job.id }}">
+                            <td>#{{ job.id }}</td>
+                            <td>{{ job.worker_name }}</td>
+                            <td>{{ job.script_name }}</td>
+                            <td class="mono">{{ job.created_at|human_dt }}</td>
+                            <td><span class="badge badge-{{ job.status }}">{{ job.status }}</span></td>
+                            <td class="mono-cell live-timer-cell"
+                                data-start="{{ job.start_time or '' }}"
+                                data-paused-at="{{ job.paused_at or '' }}"
+                                data-status="{{ job.status }}"
+                                data-duration="{% if job.duration is not none %}{{ job.duration }}{% endif %}">
+                                {% if job.duration is not none %}{{ "%.1f"|format(job.duration) }}s{% else %}—{% endif %}
+                            </td>
+                            <td class="actions">
+                                <button type="button" class="btn btn-ghost btn-sm toggle-output">Log</button>
+                                {% if job.status in ['completed', 'error', 'stopped'] %}
+                                <form action="{{ url_for('web.retry_job', job_id=job.id) }}" method="post" class="inline-form">
+                                    <button type="submit" class="btn btn-ghost btn-sm">Retry</button>
+                                </form>
+                                {% endif %}
+                                {% if job.status in ['pending', 'running'] %}
+                                <form action="{{ url_for('web.stop_job', job_id=job.id) }}" method="post" class="inline-form">
+                                    <button type="submit" class="btn btn-danger btn-sm">Stop</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr class="output-row job-detail-row" hidden>
+                            <td colspan="7">
+                                <pre class="job-output">{{ job.output or '(no output yet)' }}</pre>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr class="empty">
+                            <td colspan="7" class="home-empty">No jobs recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="home-pagination pagination" id="jobs-pagination">
+                <div class="home-pagination-left">
+                    <div class="pagination-info">
+                        Showing <span class="page-start">1</span>–<span class="page-end">10</span> of <span class="page-total">0</span>
+                    </div>
+                    <select class="page-size-select" aria-label="Jobs per page">
+                        <option value="10" selected>10 / page</option>
+                        <option value="25">25 / page</option>
+                        <option value="50">50 / page</option>
+                    </select>
+                </div>
+                <div class="pagination-controls"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const refreshBtn = document.getElementById('btn-refresh');
+    const lastRefresh = document.getElementById('last-refresh');
+    const scriptSearch = document.getElementById('script-search');
+    const workerFilter = document.getElementById('worker-filter');
+    let _liveRefreshBusy = false;
+
+    function updateTimestamp() {
+        if (lastRefresh) {
+            lastRefresh.textContent = 'Live: ' + new Date().toLocaleTimeString();
+        }
+    }
+
+    function formatLastSeenIst(raw) {
+        if (!raw) return 'Never';
+        const s = String(raw).replace('T', ' ').split('.')[0].trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+        if (!m) return s;
+        const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+        if (isNaN(d.getTime())) return s;
+        const ymd = (dt) => new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(dt);
+        const time = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true
+        }).format(d);
+        const eventDay = ymd(d);
+        const today = ymd(new Date());
+        if (eventDay === today) return 'Today ' + time;
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        if (eventDay === ymd(tomorrow)) return 'Tomorrow ' + time;
+        return new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true
+        }).format(d);
+    }
+
+    function updateTimers() {
+        document.querySelectorAll('.live-timer-cell').forEach(cell => {
+            const status = cell.getAttribute('data-status');
+            const startStr = cell.getAttribute('data-start');
+            const pausedStr = cell.getAttribute('data-paused-at');
+            const durationStr = cell.getAttribute('data-duration');
+
+            if (status === 'completed' || status === 'error' || status === 'stopped') {
+                cell.textContent = durationStr ? (parseFloat(durationStr).toFixed(1) + 's') : '—';
+                return;
+            }
+            if (!startStr) {
+                cell.textContent = '—';
+                return;
+            }
+            const startTime = new Date(startStr + 'Z').getTime();
+            const now = Date.now();
+            if (status === 'running') {
+                cell.textContent = ((now - startTime) / 1000).toFixed(1) + 's';
+            } else if (status === 'paused') {
+                if (!pausedStr) {
+                    cell.textContent = 'Paused';
+                    return;
+                }
+                const pausedAt = new Date(pausedStr + 'Z').getTime();
+                let remaining = (10 * 60) - Math.floor((now - pausedAt) / 1000);
+                if (remaining < 0) remaining = 0;
+                const mins = Math.floor(remaining / 60);
+                const secs = Math.floor(remaining % 60);
+                cell.textContent = 'Auto-resume: ' + mins + ':' + secs.toString().padStart(2, '0');
+            } else {
+                cell.textContent = '—';
+            }
+        });
+    }
+
+    function bindDaysInputs() {
+        document.querySelectorAll('.days-input').forEach(input => {
+            if (input.hasAttribute('data-bound')) return;
+            input.setAttribute('data-bound', 'true');
+            input.addEventListener('change', async function () {
+                const scriptId = this.getAttribute('data-script-id');
+                const val = this.value;
+                try {
+                    await fetch('/api/script/' + scriptId + '/days', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ days: val })
+                    });
+                    this.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+                    setTimeout(() => { this.style.backgroundColor = ''; }, 900);
+                } catch (e) {
+                    console.error('Failed to update days', e);
+                }
+            });
+        });
+    }
+
+    function bindToggleOutput() {
+        document.querySelectorAll('.toggle-output').forEach(function (btn) {
+            if (btn.hasAttribute('data-bound')) return;
+            btn.setAttribute('data-bound', 'true');
+            btn.addEventListener('click', function () {
+                const row = btn.closest('tr');
+                const detail = row && row.nextElementSibling;
+                if (!detail || !detail.classList.contains('output-row')) return;
+                const open = detail.hidden;
+                detail.hidden = !open;
+                detail.style.display = open ? 'table-row' : 'none';
+                row.classList.toggle('expanded', open);
+            });
+        });
+    }
+
+    async function liveRefresh(opts) {
+        const full = !!(opts && opts.full);
+        if (_liveRefreshBusy) return;
+        _liveRefreshBusy = true;
+        try {
+            const fetches = [fetch('/api/workers'), fetch('/api/stats')];
+            if (full) fetches.push(fetch(window.location.pathname + window.location.search));
+            const results = await Promise.all(fetches);
+            const workersData = await results[0].json();
+            const statsData = await results[1].json();
+
+            const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+            el('stat-total-workers', statsData.workers_total);
+            el('stat-online-workers', statsData.workers_online);
+            el('stat-running', statsData.jobs.running);
+            el('stat-pending', statsData.jobs.pending);
+            el('stat-completed', statsData.jobs.completed);
+            el('stat-failed', statsData.jobs.error);
+
+            const workerCount = document.getElementById('worker-count');
+            if (workerCount && workersData.workers) workerCount.textContent = workersData.workers.length;
+
+            (workersData.workers || []).forEach(function (w) {
+                const card = document.querySelector('[data-worker="' + w.worker_name + '"]');
+                if (!card) return;
+                const badgeDiv = card.querySelector('.worker-badges');
+                if (badgeDiv) {
+                    badgeDiv.innerHTML = '<span class="badge badge-' + w.status + '">' + w.status + '</span>' +
+                        (w.status === 'online'
+                            ? ' <span class="badge badge-' + (w.state === 'busy' ? 'primary' : 'muted') + ' worker-state">' + w.state + '</span>'
+                            : '');
+                }
+                const seen = card.querySelector('.last-seen');
+                if (seen) seen.textContent = formatLastSeenIst(w.last_seen);
+            });
+
+            if (full && results[2]) {
+                const activeEl = document.activeElement;
+                const isEditingDays = activeEl && activeEl.classList.contains('days-input');
+                const htmlText = await results[2].text();
+                const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+
+                if (!isEditingDays) {
+                    const newBody = doc.getElementById('scripts-table-body');
+                    const oldBody = document.getElementById('scripts-table-body');
+                    if (newBody && oldBody) {
+                        oldBody.innerHTML = newBody.innerHTML;
+                        bindDaysInputs();
+                        applyScriptFilters(true);
+                    }
+                }
+
+                const newJobs = doc.getElementById('jobs-tbody');
+                const oldJobs = document.getElementById('jobs-tbody');
+                if (newJobs && oldJobs) {
+                    oldJobs.innerHTML = newJobs.innerHTML;
+                    bindToggleOutput();
+                    if (typeof jobsPaginator !== 'undefined') jobsPaginator.refreshData(true);
+                }
+
+                const newJobCount = doc.getElementById('job-count');
+                const oldJobCount = document.getElementById('job-count');
+                if (newJobCount && oldJobCount) oldJobCount.textContent = newJobCount.textContent;
+            }
+
+            updateTimestamp();
+        } catch (e) {
+            console.warn('Live refresh failed', e);
+        } finally {
+            _liveRefreshBusy = false;
+        }
+    }
+
+    async function liveLogPolling() {
+        if (document.hidden) return;
+        const runningRows = document.querySelectorAll('tr[data-job-id]');
+        if (!runningRows.length) return;
+        const targets = [];
+        for (const row of runningRows) {
+            const statusBadge = row.querySelector('td .badge');
+            if (!statusBadge) continue;
+            const status = statusBadge.textContent.trim().toLowerCase();
+            if (status !== 'running' && status !== 'pending' && status !== 'paused') continue;
+            const jobId = row.getAttribute('data-job-id');
+            if (jobId) targets.push({ row, statusBadge, status, jobId });
+        }
+        if (!targets.length) return;
+
+        const applyStatus = (row, statusBadge, status, data) => {
+            if (!data) return;
+            if (data.status !== status) {
+                statusBadge.className = 'badge badge-' + data.status;
+                statusBadge.textContent = data.status;
+                const timerCell = row.querySelector('.live-timer-cell');
+                if (timerCell) {
+                    timerCell.setAttribute('data-status', data.status);
+                    if (data.duration) timerCell.setAttribute('data-duration', data.duration);
+                }
+                if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
+                    liveRefresh({ full: true });
+                }
+            }
+            const outputRow = row.nextElementSibling;
+            if (outputRow && outputRow.classList.contains('output-row')) {
+                const pre = outputRow.querySelector('.job-output');
+                if (pre) pre.textContent = data.output || '(no output yet)';
+            }
+        };
+
+        try {
+            if (targets.length >= 2) {
+                const res = await fetch('/job-status-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_ids: targets.map(t => parseInt(t.jobId, 10)) }),
+                });
+                if (res.ok) {
+                    const payload = await res.json();
+                    const jobs = payload.jobs || {};
+                    for (const t of targets) {
+                        applyStatus(t.row, t.statusBadge, t.status, jobs[String(t.jobId)] || jobs[t.jobId]);
+                    }
+                    return;
+                }
+            }
+            // Single job or batch unavailable — same per-job endpoint as before
+            for (const t of targets) {
+                try {
+                    const res = await fetch('/job-status/' + t.jobId);
+                    if (!res.ok) continue;
+                    applyStatus(t.row, t.statusBadge, t.status, await res.json());
+                } catch (e) { /* ignore */ }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    class TablePaginator {
+        constructor(tbodyId, paginationId, isJobTable) {
+            this.tbody = document.getElementById(tbodyId);
+            this.pagination = document.getElementById(paginationId);
+            if (!this.tbody || !this.pagination) return;
+            this.isJobTable = !!isJobTable;
+            this.pageSize = 10;
+            this.currentPage = 1;
+            this.filterFn = null;
+            const select = this.pagination.querySelector('.page-size-select');
+            if (select) {
+                select.addEventListener('change', (e) => {
+                    this.pageSize = parseInt(e.target.value, 10) || 10;
+                    this.currentPage = 1;
+                    this.render();
+                });
+            }
+            const initialStyle = document.getElementById('initial-pagination-style');
+            if (initialStyle && tbodyId === 'scripts-table-body') initialStyle.remove();
+            this.refreshData(false);
+        }
+
+        refreshData(preservePage) {
+            this.items = [];
+            const rows = Array.from(this.tbody.children);
+            if (this.isJobTable) {
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].classList.contains('empty')) continue;
+                    if (rows[i].classList.contains('job-row') || rows[i].hasAttribute('data-job-id')) {
+                        const group = [rows[i]];
+                        if (i + 1 < rows.length && (rows[i + 1].classList.contains('output-row') || rows[i + 1].classList.contains('job-detail-row'))) {
+                            group.push(rows[i + 1]);
+                            i++;
+                        }
+                        this.items.push(group);
+                    }
+                }
+            } else {
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].classList.contains('empty')) continue;
+                    if (this.filterFn && !this.filterFn(rows[i])) {
+                        rows[i].style.display = 'none';
+                        continue;
+                    }
+                    this.items.push([rows[i]]);
+                }
+            }
+            this.totalItems = this.items.length;
+            if (!preservePage) this.currentPage = 1;
+            const totalPages = Math.ceil(this.totalItems / this.pageSize) || 1;
+            if (this.currentPage > totalPages) this.currentPage = totalPages;
+            this.render();
+        }
+
+        render() {
+            if (!this.pagination) return;
+            if (this.totalItems === 0) {
+                this.pagination.style.display = 'none';
+                return;
+            }
+            this.pagination.style.display = 'flex';
+            const totalPages = Math.ceil(this.totalItems / this.pageSize) || 1;
+            if (this.currentPage > totalPages) this.currentPage = totalPages;
+            const startIdx = (this.currentPage - 1) * this.pageSize;
+            const endIdx = Math.min(startIdx + this.pageSize, this.totalItems);
+
+            this.items.forEach((item, idx) => {
+                if (idx >= startIdx && idx < endIdx) {
+                    item[0].style.display = '';
+                    if (item.length > 1) {
+                        if (item[0].classList.contains('expanded') || !item[1].hidden) {
+                            item[1].style.display = 'table-row';
+                            item[1].hidden = false;
+                        } else {
+                            item[1].style.display = 'none';
+                            item[1].hidden = true;
+                        }
+                    }
+                } else {
+                    item[0].style.display = 'none';
+                    if (item.length > 1) item[1].style.display = 'none';
+                }
+            });
+
+            this.pagination.querySelector('.page-start').textContent = startIdx + 1;
+            this.pagination.querySelector('.page-end').textContent = endIdx;
+            this.pagination.querySelector('.page-total').textContent = this.totalItems;
+
+            const controls = this.pagination.querySelector('.pagination-controls');
+            if (!controls) return;
+            controls.innerHTML = '';
+            if (totalPages > 1) {
+                const prev = document.createElement('button');
+                prev.className = 'pagination-btn';
+                prev.type = 'button';
+                prev.textContent = '‹';
+                prev.disabled = this.currentPage === 1;
+                prev.onclick = () => this.goToPage(this.currentPage - 1);
+                controls.appendChild(prev);
+
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= this.currentPage - 1 && i <= this.currentPage + 1)) {
+                        const btn = document.createElement('button');
+                        btn.className = 'pagination-btn' + (i === this.currentPage ? ' active' : '');
+                        btn.type = 'button';
+                        btn.textContent = i;
+                        btn.onclick = () => this.goToPage(i);
+                        controls.appendChild(btn);
+                    } else if (i === this.currentPage - 2 || i === this.currentPage + 2) {
+                        const dots = document.createElement('span');
+                        dots.className = 'pagination-dots';
+                        dots.textContent = '…';
+                        controls.appendChild(dots);
+                    }
+                }
+
+                const next = document.createElement('button');
+                next.className = 'pagination-btn';
+                next.type = 'button';
+                next.textContent = '›';
+                next.disabled = this.currentPage === totalPages;
+                next.onclick = () => this.goToPage(this.currentPage + 1);
+                controls.appendChild(next);
+            }
+        }
+
+        goToPage(page) {
+            this.currentPage = page;
+            this.render();
+        }
+    }
+
+    function applyScriptFilters(preservePage) {
+        const q = (scriptSearch && scriptSearch.value || '').trim().toLowerCase();
+        const w = (workerFilter && workerFilter.value || '').trim().toLowerCase();
+        scriptsPaginator.filterFn = function (row) {
+            const name = row.getAttribute('data-script-name') || '';
+            const worker = row.getAttribute('data-worker-name') || '';
+            if (q && name.indexOf(q) === -1 && worker.indexOf(q) === -1) return false;
+            if (w && worker !== w) return false;
+            return true;
+        };
+        // Also filter worker cards client-side
+        document.querySelectorAll('#worker-grid [data-worker]').forEach(function (card) {
+            const name = (card.getAttribute('data-worker') || '').toLowerCase();
+            card.style.display = (!w || name === w) ? '' : 'none';
+        });
+        scriptsPaginator.refreshData(!!preservePage);
+    }
+
+    let scriptsPaginator = new TablePaginator('scripts-table-body', 'scripts-pagination', false);
+    let jobsPaginator = new TablePaginator('jobs-tbody', 'jobs-pagination', true);
+
+    let searchTimer = null;
+    if (scriptSearch) {
+        scriptSearch.addEventListener('input', function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () { applyScriptFilters(false); }, 180);
+        });
+    }
+    if (workerFilter) {
+        workerFilter.addEventListener('change', function () { applyScriptFilters(false); });
+    }
+
+    bindDaysInputs();
+    bindToggleOutput();
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            liveRefresh({ full: true });
+        });
+    }
+
+    setInterval(function () { liveRefresh(); }, 8000);
+    setInterval(liveLogPolling, 1000);
+    setInterval(function () {
+        updateTimestamp();
+        updateTimers();
+    }, 1000);
+    updateTimestamp();
+    updateTimers();
+})();
+</script>
+{% endblock %}

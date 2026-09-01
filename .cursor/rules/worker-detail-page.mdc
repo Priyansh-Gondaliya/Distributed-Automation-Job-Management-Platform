@@ -1,0 +1,41 @@
+---
+description: Protect worker detail page flow — do not break working dashboard/explorer/sync behavior
+alwaysApply: true
+---
+
+# Worker Detail Page — Do Not Break
+
+The **worker detail page** (File Explorer, live FS sync, config/path reload, permissions, scheduler hooks) is **working correctly**. Treat it as frozen behavior unless the user explicitly asks to change it.
+
+## Hard constraints
+
+- Do **not** change existing dashboard flow, business logic, permissions, or File Explorer behavior.
+- Any fix or optimization must be **fully backward compatible** — features must keep working exactly as they do now.
+- Prefer minimal, additive patches. Do not refactor “for cleanliness” across this flow.
+- Do not rewrite watcher/sync/poll contracts unless required to fix a reported bug, and then preserve the same external behavior.
+
+## Protected surfaces (do not casually edit)
+
+- `templates/worker_detail.html` — config UI, sync timer, path change UX
+- `static/js/file_explorer.js` — poll `/files/list`, render tree, sync-pending wait
+- `static/css/file_explorer.css`
+- `routes/api_routes.py` — `/files/list`, `/api/sync-folder-partial`, `/api/sync-file-tree`, worker-config, commands
+- `routes/web_routes.py` — worker detail route/rendering
+- `worker_agent/worker.py` — FS watcher, partial/full sync, `reload_config`, post-command folder sync
+- Related DB helpers in `database.py` for `worker_file_tree`, commands, PC access
+
+## Live update contract (must keep working)
+
+1. Worker PC FS change → watcher → `/api/sync-folder-partial` (preferred) → DB tree update.
+2. Dashboard polls `/files/list` (~1.5s) with **no HTTP cache** and re-renders when data changes.
+3. Path/config change → `reload_config` → worker applies path + resync; UI may show sync-pending only for that explicit flow.
+4. Dashboard-originated file ops still push parent folder sync after the command completes.
+
+## When changing nearby code
+
+- ✅ Bugfix that restores the contract above without changing UX meaning
+- ✅ Narrow performance fix that does not alter API shapes or permission checks
+- ❌ New “sync modes”, poll redesigns, permission model changes, or tree-clear side effects without an explicit user request
+- ❌ Removing partial sync, watcher debounce, or `cache: 'no-store'` / `Cache-Control: no-store` on `/files/list`
+
+If a task might affect this page, **preserve current behavior first**; ask before any intentional behavior change.

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Workers · AutoControl{% endblock %}
+{% block page_title %}Workers{% endblock %}
+
+{% block content %}
+<!-- Stats Bar -->
+<section class="stats-grid" id="stats-bar">
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-blue">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="M8 21h8M12 17v4" />
+            </svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-value" id="stat-total-workers">{{ total_workers }}</span>
+            <span class="stat-label">Total Workers</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-green">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M8 12l2 2 4-4" />
+            </svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-value" id="stat-online-workers">{{ online_count }}</span>
+            <span class="stat-label">Online</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-red">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4m0 4h.01" />
+            </svg>
+        </div>
+        <div class="stat-info">
+            <span class="stat-value" id="stat-offline-workers">{{ total_workers - online_count }}</span>
+            <span class="stat-label">Offline</span>
+        </div>
+    </div>
+</section>
+
+<!-- Toolbar -->
+<section class="toolbar">
+    <form class="search-form" method="get" action="{{ url_for('web.workers_page') }}" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <select name="status" class="status-select" id="status-filter">
+            <option value="">All Statuses</option>
+            <option value="online" {% if status_filter == 'online' %}selected{% endif %}>Online</option>
+            <option value="offline" {% if status_filter == 'offline' %}selected{% endif %}>Offline</option>
+        </select>
+        <input type="text" name="search" class="form-input" placeholder="Search by name or IP..." value="{{ search_query }}" style="min-width: 250px;">
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        <a href="{{ url_for('web.workers_page') }}" class="btn btn-ghost btn-sm">Clear</a>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-refresh" onclick="liveRefresh()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M23 4v6h-6M1 20v-6h6" />
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+            </svg>
+            Refresh
+        </button>
+    </form>
+</section>
+
+<!-- Workers Section -->
+<section class="section" id="workers-section">
+    <div class="section-header">
+        <h2>Workers</h2>
+        <span class="badge badge-muted" id="worker-count">{{ workers|length }}</span>
+    </div>
+    <div class="card-grid" id="worker-grid">
+        {% for worker in workers %}
+        <article class="card worker-card" data-worker="{{ worker.worker_name }}" data-status="{{ worker.status }}">
+            <div class="card-top">
+                <h3><a href="{{ url_for('web.worker_detail', ip_address=worker.ip_address) }}">{{ worker.worker_name }}</a></h3>
+                <div class="worker-badges">
+                    <span class="badge badge-{{ worker.status }}">{{ worker.status }}</span>
+                    {% if worker.status == 'online' %}
+                    <span class="badge badge-{{ 'primary' if worker.state == 'busy' else 'muted' }} worker-state">{{ worker.state }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <dl class="meta">
+                <dt>IP</dt>
+                <dd>{{ worker.ip_address or '—' }}</dd>
+                <dt>Owner</dt>
+                <dd>{{ worker.username or '—' }}</dd>
+                <dt>Last seen</dt>
+                <dd class="last-seen">{{ worker.last_seen|human_dt if worker.last_seen else 'Never' }}</dd>
+            </dl>
+            <div class="card-actions">
+                <a href="{{ url_for('web.worker_detail', ip_address=worker.ip_address) }}" class="btn btn-ghost btn-sm">Open Details →</a>
+            </div>
+        </article>
+        {% else %}
+        <p class="empty">No workers found matching your filters. {% if current_user.role != 'admin' %}Ask admin to grant you PC access.{% else %}Start a worker agent on a PC.{% endif %}</p>
+        {% endfor %}
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function() {
+        function formatLastSeenIst(raw) {
+            if (!raw) return 'Never';
+            const s = String(raw).replace('T', ' ').split('.')[0].trim();
+            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+            if (!m) return s;
+            const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+            if (isNaN(d.getTime())) return s;
+            const ymd = (dt) => new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).format(dt);
+            const time = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true
+            }).format(d);
+            const eventDay = ymd(d);
+            const today = ymd(new Date());
+            if (eventDay === today) return 'Today ' + time;
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            if (eventDay === ymd(tomorrow)) return 'Tomorrow ' + time;
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric',
+                hour: 'numeric', minute: '2-digit', hour12: true
+            }).format(d);
+        }
+
+        async function liveRefresh() {
+            try {
+                // Fetch the latest workers status via API
+                const workersRes = await fetch('/api/workers');
+                const workersData = await workersRes.json();
+                
+                // Update stats
+                const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+                const total = workersData.workers.length;
+                const online = workersData.workers.filter(w => w.status === 'online').length;
+                el('stat-total-workers', total);
+                el('stat-online-workers', online);
+                el('stat-offline-workers', total - online);
+                
+                // Update each worker card on screen
+                workersData.workers.forEach(function (w) {
+                    const card = document.querySelector('[data-worker="' + w.worker_name + '"]');
+                    if (!card) return;
+                    card.setAttribute('data-status', w.status || 'offline');
+                    const badgeDiv = card.querySelector('.worker-badges');
+                    if (badgeDiv) {
+                        badgeDiv.innerHTML = '<span class="badge badge-' + w.status + '">' + w.status + '</span>' +
+                            (w.status === 'online' ? ' <span class="badge badge-' + (w.state === 'busy' ? 'primary' : 'muted') + ' worker-state">' + w.state + '</span>' : '');
+                    }
+                    const seen = card.querySelector('.last-seen');
+                    if (seen) seen.textContent = formatLastSeenIst(w.last_seen);
+                });
+
+                // Keep online cards first in the grid
+                const grid = document.getElementById('worker-grid');
+                if (grid) {
+                    const cards = Array.from(grid.querySelectorAll('.worker-card'));
+                    cards.sort(function (a, b) {
+                        const ao = (a.getAttribute('data-status') || '') === 'online' ? 0 : 1;
+                        const bo = (b.getAttribute('data-status') || '') === 'online' ? 0 : 1;
+                        if (ao !== bo) return ao - bo;
+                        const an = (a.getAttribute('data-worker') || '').toLowerCase();
+                        const bn = (b.getAttribute('data-worker') || '').toLowerCase();
+                        return an < bn ? -1 : an > bn ? 1 : 0;
+                    });
+                    cards.forEach(function (c) { grid.appendChild(c); });
+                }
+                
+                const lr = document.getElementById('last-refresh');
+                if (lr) lr.textContent = 'Updated ' + new Date().toLocaleTimeString();
+            } catch (e) {
+                console.warn('Live refresh failed', e);
+            }
+        }
+        
+        setInterval(liveRefresh, 5000);
+        
+        // Initial setup
+        const lr = document.getElementById('last-refresh');
+        if (lr) lr.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    })();
+</script>
+{% endblock %}

@@ -1,0 +1,3299 @@
+{% extends "base.html" %}
+{% block title %}Reports & Analytics · AutoControl{% endblock %}
+{% block page_title %}Reports & Analytics{% endblock %}
+
+{% block content %}
+<script type="application/json" id="reports-boot-cfg">{{ {"isAdmin": current_user.role == "admin"}|tojson }}</script>
+<script>
+/* Resolve tab before first paint so reload/hash does not flash another section. */
+(function () {
+    var h = (window.location.hash || '').toLowerCase();
+    var isAdmin = !!JSON.parse(document.getElementById('reports-boot-cfg').textContent).isAdmin;
+    var mode = 'history';
+    if (h === '#schedule-tracking' && isAdmin) mode = 'schedule-tracking';
+    else if (h === '#watchlist') mode = 'watchlist';
+    else if (h === '#analytics') mode = 'history';
+    else if (h === '#history') mode = 'history';
+    // Non-admins must never land on schedule-tracking chrome
+    if (!isAdmin && h === '#schedule-tracking') {
+        try { history.replaceState(null, null, '#history'); } catch (e) {}
+    }
+    document.documentElement.setAttribute('data-reports-tab', mode);
+})();
+</script>
+<style>
+    .tabs-container {
+        display: flex;
+        gap: 0.5rem;
+        background: var(--bg-sunken, rgba(39, 39, 42, 0.5));
+        padding: 0.35rem;
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        margin-bottom: 1rem;
+    }
+
+    .tab-btn {
+        background: transparent;
+        color: var(--text-secondary, #a1a1aa);
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: color 0.15s ease, background-color 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .tab-btn:hover {
+        color: var(--text-primary, #f4f4f5);
+        background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+    }
+
+    .tab-btn.active {
+        background: var(--accent-glow, rgba(99, 102, 241, 0.15));
+        color: var(--accent-400, #818cf8);
+        box-shadow: 0 0 15px var(--accent-glow, rgba(99, 102, 241, 0.1));
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    /* Match hash mode before JS runs (avoids History → other-tab flash). */
+    html[data-reports-tab="schedule-tracking"] #reportsFiltersForm,
+    html[data-reports-tab="schedule-tracking"] .tabs-container {
+        display: none !important;
+    }
+    html[data-reports-tab="schedule-tracking"] #tab-history,
+    html[data-reports-tab="schedule-tracking"] #tab-analytics,
+    html[data-reports-tab="schedule-tracking"] #tab-watchlist {
+        display: none !important;
+    }
+    html[data-reports-tab="schedule-tracking"] #tab-schedule-tracking {
+        display: block !important;
+    }
+
+    html[data-reports-tab="watchlist"] #tab-history,
+    html[data-reports-tab="watchlist"] #tab-analytics,
+    html[data-reports-tab="watchlist"] #tab-schedule-tracking {
+        display: none !important;
+    }
+    html[data-reports-tab="watchlist"] #tab-watchlist {
+        display: block !important;
+    }
+
+    /* Compact filters bar */
+    .filters-bar {
+        background: var(--bg-elevated, rgba(24, 24, 27, 0.6));
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        border-radius: 10px;
+        padding: 0.55rem 0.75rem;
+        margin-bottom: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 0.65rem;
+        align-items: flex-end;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        flex: 1 1 118px;
+        min-width: 118px;
+        max-width: 200px;
+    }
+
+    .filter-group label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-tertiary, #71717a);
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    .filter-input {
+        background: var(--bg-sunken, rgba(9, 9, 11, 0.5));
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+        color: var(--text-primary, #f4f4f5);
+        padding: 0.3rem 0.55rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 32px;
+        height: 32px;
+    }
+
+    .filter-input:focus {
+        outline: none;
+        border-color: var(--accent-500, #6366f1);
+        box-shadow: 0 0 0 2px var(--accent-glow, rgba(99, 102, 241, 0.2));
+    }
+
+    .filter-input:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+        flex-wrap: nowrap;
+        margin-left: auto;
+    }
+
+    .btn-reset {
+        background: transparent;
+        color: var(--text-secondary, #a1a1aa);
+        border: 1px solid var(--border-default, rgba(255,255,255,0.12));
+        padding: 0 0.85rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.8rem;
+    }
+    .btn-reset:hover {
+        color: var(--text-primary, #f4f4f5);
+        background: var(--bg-hover, rgba(255,255,255,0.05));
+    }
+
+    .reports-table-card {
+        background: var(--bg-elevated, rgba(24, 24, 27, 0.6));
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .reports-pagination {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--border-default, rgba(255,255,255,0.05));
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        background: var(--bg-sunken, rgba(9,9,11,0.3));
+    }
+    .reports-pagination-left {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .reports-pagination .pagination-info {
+        color: var(--text-tertiary, #71717a);
+        font-size: 0.85rem;
+    }
+    .reports-page-size-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .reports-page-size {
+        width: auto;
+        min-width: 4.5rem;
+        min-height: 32px;
+        padding: 0.25rem 0.5rem;
+    }
+    .reports-pagination .pagination-controls {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .reports-pagination .pagination-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        height: 32px;
+        padding: 0 0.5rem;
+        border-radius: 6px;
+        border: 1px solid var(--border-default, rgba(255,255,255,0.1));
+        background: var(--bg-elevated, rgba(255,255,255,0.06));
+        color: var(--text-secondary, #a1a1aa);
+        text-decoration: none;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .reports-pagination .pagination-btn:hover:not(.disabled):not(.active) {
+        color: var(--text-primary, #f4f4f5);
+        border-color: var(--accent-500, #6366f1);
+    }
+    .reports-pagination .pagination-btn.active {
+        background: var(--accent-500, #6366f1);
+        border-color: var(--accent-500, #6366f1);
+        color: #fff;
+    }
+    .reports-pagination .pagination-btn.disabled {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+    .reports-pagination .pagination-dots {
+        color: var(--text-tertiary, #71717a);
+        padding: 0 0.25rem;
+    }
+    
+    .btn-apply {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border: none;
+        padding: 0 1rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 32px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    
+    .btn-apply:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    /* Soft pagination: dim table only — no full-page flash */
+    #reportsHistoryCard.is-paging {
+        opacity: 0.65;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+    }
+    script[type="application/json"],
+    template.report-err-json,
+    #reportsHistoryCard template[id^="report-err-"] {
+        display: none !important;
+    }
+    
+    /* Grid Layouts */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+    
+    .kpi-card {
+        background: var(--bg-elevated, rgba(24, 24, 27, 0.6));
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        min-height: 0;
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        background: var(--bg-hover, rgba(39, 39, 42, 0.7));
+    }
+    
+    .kpi-label {
+        font-size: 0.78rem;
+        color: var(--text-secondary, #a1a1aa);
+        font-weight: 500;
+        line-height: 1.2;
+    }
+    
+    .kpi-value {
+        font-size: 1.45rem;
+        font-weight: 700;
+        color: var(--text-primary, #f4f4f5);
+        line-height: 1.15;
+    }
+    
+    .kpi-icon {
+        width: 26px;
+        height: 26px;
+        padding: 4px;
+        border-radius: 6px;
+        margin-bottom: 0.15rem;
+    }
+
+    .insights-kpi .kpi-card {
+        padding: 0.7rem 0.95rem;
+    }
+
+    .insights-kpi .kpi-value {
+        font-size: 1.35rem;
+    }
+    
+    /* Analytics Grid */
+    .analytics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+        gap: 1.5rem;
+    }
+
+    .kpi-sub {
+        font-size: 0.72rem;
+        color: #71717a;
+        line-height: 1.3;
+        margin-top: 0.1rem;
+    }
+    .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .panel-hint { font-size: 0.75rem; color: #71717a; }
+    .ring-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        align-items: center;
+        justify-content: center;
+        min-height: 160px;
+    }
+    .ring-chart { position: relative; width: 120px; height: 120px; }
+    .ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ring-center {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .ring-pct { font-size: 1.4rem; font-weight: 700; color: #f4f4f5; }
+    .ring-label { font-size: 0.7rem; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.04em; }
+    .ring-legend { display: flex; flex-direction: column; gap: 0.55rem; color: #d4d4d8; font-size: 0.9rem; }
+    .ring-legend .dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.45rem;
+    }
+    .ring-legend .dot.ok { background: #34d399; }
+    .ring-legend .dot.bad { background: #f87171; }
+    .ring-legend .dot.other { background: #71717a; }
+    .stack-list { display: flex; flex-direction: column; gap: 0.85rem; }
+    .stack-row-top { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.8rem; margin-bottom: 0.3rem; }
+    .stack-path {
+        color: #e4e4e7; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        word-break: break-all; text-decoration: none;
+    }
+    .stack-path:hover { color: #a5b4fc; }
+    .stack-meta { color: #a1a1aa; white-space: nowrap; }
+    .stack-bar {
+        width: 100%; height: 6px; background: rgba(239, 68, 68, 0.2);
+        border-radius: 3px; overflow: hidden;
+    }
+    .stack-bar-fill {
+        height: 100%; width: 0%; background: #34d399; border-radius: 3px;
+        transition: width 0.4s ease;
+    }
+    .insight-table { width: 100%; border-collapse: collapse; }
+    .insight-table td {
+        padding: 0.75rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+        color: #e4e4e7; font-size: 0.9rem;
+    }
+    .insight-table td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; }
+    .insight-table td.num { text-align: right; }
+    .empty-hint { color: #71717a; font-size: 0.9rem; text-align: center; padding: 2rem 0.5rem; }
+    .star-btn { background: none; border: none; cursor: pointer; padding: 0.25rem; flex-shrink: 0; }
+
+    .watchlist-shell {
+        max-width: 920px; margin: 0 auto;
+        background: var(--bg-elevated, rgba(24, 24, 27, 0.6));
+        border: 1px solid var(--border-default, rgba(255,255,255,0.05));
+        border-radius: 12px; padding: 1.25rem 1.5rem;
+    }
+    .watchlist-toolbar {
+        display: flex; flex-wrap: wrap; gap: 1rem;
+        justify-content: space-between; align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+    .watchlist-intro { margin: 0; color: var(--text-secondary, #a1a1aa); font-size: 0.85rem; max-width: 52ch; }
+    .watchlist-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .btn-ghost-sm {
+        background: var(--bg-hover, rgba(255,255,255,0.05)); color: var(--text-primary, #e4e4e7);
+        border: 1px solid var(--border-default, rgba(255,255,255,0.1)); border-radius: 6px;
+        padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.85rem;
+    }
+    .watchlist-filters {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
+        margin-bottom: 1rem;
+    }
+    .wl-counts { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .wl-chip {
+        font-size: 0.75rem; color: var(--text-secondary, #a1a1aa); background: var(--bg-hover, rgba(255,255,255,0.05));
+        border: 1px solid var(--border-default, rgba(255,255,255,0.08)); border-radius: 999px; padding: 0.2rem 0.65rem;
+    }
+    .wl-chip.bad { color: #fecaca; border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.12); }
+    .wl-chip.ok { color: #bbf7d0; border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.12); }
+    .watchlist-list { max-height: min(60vh, 560px); overflow-y: auto; display: flex; flex-direction: column; gap: 0.55rem; }
+    .watchlist-item {
+        display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+        padding: 0.9rem 1rem; border-radius: 10px;
+        background: var(--bg-sunken, rgba(9,9,11,0.4)); border: 1px solid var(--border-default, rgba(255,255,255,0.05));
+    }
+    .watchlist-item:hover { background: var(--bg-hover, rgba(39,39,42,0.55)); }
+    .wl-item-main { min-width: 0; flex: 1; }
+    .wl-item-path {
+        color: var(--text-primary, #f4f4f5); font-size: 0.9rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        word-break: break-all;
+    }
+    .wl-item-meta { font-size: 0.75rem; color: #a1a1aa; margin-top: 0.3rem; }
+    .wl-item-meta.fail { color: #f87171; }
+    .wl-item-side { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+    .wl-open-link {
+        font-size: 0.75rem; color: #a5b4fc; text-decoration: none;
+        padding: 0.35rem 0.55rem; border-radius: 6px; border: 1px solid rgba(99,102,241,0.25);
+    }
+    .wl-open-link:hover { background: rgba(99,102,241,0.12); }
+
+    @media (max-width: 640px) {
+        .analytics-grid { grid-template-columns: 1fr; }
+        .watchlist-shell { padding: 1rem; }
+    }
+    
+    .analytics-panel {
+        background: var(--bg-elevated, rgba(24, 24, 27, 0.6));
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        border-radius: 12px;
+        padding: 1.5rem;
+    }
+    
+    .panel-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary, #f4f4f5);
+        margin: 0 0 1.2rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    /* Beautiful Tables */
+    .glass-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    
+    .glass-table th {
+        text-align: left;
+        padding: 1rem;
+        color: var(--text-tertiary, #a1a1aa);
+        font-weight: 600;
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        background: var(--bg-sunken, rgba(9, 9, 11, 0.3));
+    }
+    
+    .glass-table th:first-child { border-top-left-radius: 8px; }
+    .glass-table th:last-child { border-top-right-radius: 8px; }
+    
+    .glass-table td {
+        padding: 1rem;
+        color: var(--text-primary, #e4e4e7);
+        font-size: 0.9rem;
+        border-bottom: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        vertical-align: middle;
+        transition: background 0.2s;
+    }
+    
+    .glass-table tbody tr:hover td {
+        background: var(--bg-hover, rgba(255, 255, 255, 0.02));
+    }
+    
+    .glass-table tbody tr:last-child td { border-bottom: none; }
+    
+    /* Badges */
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: capitalize;
+    }
+    
+    .badge.success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge.error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge.warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    
+    /* Watchlist List */
+    .watchlist-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.9rem 1rem;
+        background: var(--bg-sunken, rgba(9, 9, 11, 0.4));
+        border: 1px solid var(--border-default, rgba(255, 255, 255, 0.05));
+        border-radius: 10px;
+        margin-bottom: 0;
+        transition: background 0.2s;
+    }
+    
+    .watchlist-item:hover {
+        transform: none;
+        background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+    /* Light theme — override hardcoded dark glass surfaces */
+    html.light-theme .filters-bar,
+    html.light-theme .reports-table-card,
+    html.light-theme .kpi-card,
+    html.light-theme .watchlist-shell,
+    html.light-theme .analytics-panel {
+        background: #ffffff;
+        border-color: #e2e8f0;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    html.light-theme .kpi-card:hover,
+    html.light-theme .watchlist-item:hover {
+        background: #f8fafc;
+    }
+    html.light-theme .filter-input,
+    html.light-theme .btn-ghost-sm,
+    html.light-theme .wl-chip,
+    html.light-theme .watchlist-item {
+        background: #ffffff;
+        border-color: #e2e8f0;
+        color: #0f172a;
+    }
+    html.light-theme .filter-input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+    }
+    html.light-theme .tabs-container {
+        background: #f1f5f9;
+        border-color: #e2e8f0;
+    }
+    html.light-theme .tab-btn { color: #64748b; }
+    html.light-theme .tab-btn:hover { color: #0f172a; background: #e2e8f0; }
+    html.light-theme .tab-btn.active { background: rgba(99, 102, 241, 0.12); color: #4f46e5; }
+    html.light-theme .kpi-value,
+    html.light-theme .wl-item-path,
+    html.light-theme .ring-pct,
+    html.light-theme .stack-path,
+    html.light-theme .panel-title,
+    html.light-theme .insight-table td,
+    html.light-theme .ring-legend {
+        color: #0f172a;
+        -webkit-text-fill-color: #0f172a;
+        background: none;
+    }
+    html.light-theme .insight-table td {
+        border-bottom-color: #e2e8f0;
+    }
+    html.light-theme .kpi-label,
+    html.light-theme .watchlist-intro,
+    html.light-theme .empty-hint,
+    html.light-theme .kpi-sub,
+    html.light-theme .panel-hint,
+    html.light-theme .reports-pagination .pagination-info {
+        color: #64748b;
+    }
+    html.light-theme .reports-pagination {
+        background: #f8fafc;
+        border-top-color: #e2e8f0;
+    }
+    html.light-theme .reports-pagination .pagination-btn {
+        background: #ffffff;
+        border-color: #e2e8f0;
+        color: #475569;
+    }
+    html.light-theme .reports-pagination .pagination-btn.active {
+        background: #6366f1;
+        border-color: #6366f1;
+        color: #fff;
+    }
+    html.light-theme .btn-reset {
+        color: #475569;
+        border-color: #e2e8f0;
+        background: #ffffff;
+    }
+    html.light-theme .btn-reset:hover {
+        color: #0f172a;
+        background: #f1f5f9;
+    }
+    html.light-theme .glass-table th {
+        background: #f8fafc !important;
+        color: #64748b !important;
+        border-bottom-color: #e2e8f0 !important;
+    }
+    html.light-theme .glass-table td {
+        color: #0f172a !important;
+        border-bottom-color: #e2e8f0 !important;
+    }
+    html.light-theme .glass-table tbody tr:hover td {
+        background: #f8fafc !important;
+    }
+    html.light-theme .wl-chip.bad { color: #991b1b; }
+    html.light-theme .wl-chip.ok { color: #065f46; }
+    html.light-theme .flatpickr-calendar {
+        background: #ffffff;
+        border-color: #e2e8f0;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+    }
+    html.light-theme ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.15); }
+    html.light-theme ::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.25); }
+
+    /* Admin Schedule Tracking */
+    .st-shell { display: flex; flex-direction: column; gap: 1.25rem; }
+    .st-hero {
+        display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    .st-lede { margin: 0; color: var(--text-secondary, #a1a1aa); font-size: 0.9rem; max-width: 42rem; line-height: 1.45; }
+    .st-kpis { display: flex; gap: 0.55rem; flex-wrap: wrap; }
+    .st-kpi {
+        min-width: 6.2rem; padding: 0.65rem 0.85rem; border-radius: 10px;
+        border: 1px solid var(--border-default, rgba(255,255,255,0.08));
+        background: var(--bg-elevated, rgba(24,24,27,0.55));
+    }
+    .st-kpi b { display: block; font-size: 1.15rem; color: var(--text-primary, #f4f4f5); }
+    .st-kpi span { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary, #a1a1aa); }
+    .st-section {
+        border: 1px solid var(--border-default, rgba(255,255,255,0.08));
+        border-radius: 14px;
+        background: var(--bg-elevated, rgba(24,24,27,0.45));
+        overflow: hidden;
+    }
+    .st-section-head {
+        padding: 1rem 1.15rem 0.75rem;
+        border-bottom: 1px solid var(--border-default, rgba(255,255,255,0.06));
+    }
+    .st-section-head h4 { margin: 0 0 0.25rem; font-size: 1.05rem; color: var(--text-primary, #f4f4f5); }
+    .st-section-head p { margin: 0; font-size: 0.82rem; color: var(--text-secondary, #a1a1aa); }
+    .st-filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.65rem 0.75rem;
+        padding: 0.9rem 1.15rem;
+        border-bottom: 1px solid var(--border-default, rgba(255,255,255,0.06));
+        align-items: end;
+    }
+    .st-filters label {
+        display: flex; flex-direction: column; gap: 0.28rem;
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+        text-transform: uppercase; color: var(--text-secondary, #a1a1aa);
+    }
+    .st-filters select, .st-filters input {
+        height: 36px; border-radius: 8px; border: 1px solid var(--border-default, rgba(255,255,255,0.1));
+        background: var(--bg-sunken, rgba(9,9,11,0.55)); color: var(--text-primary, #f4f4f5);
+        padding: 0 0.55rem; font-size: 0.82rem;
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+    .st-filters input.flatpickr-date {
+        cursor: pointer;
+        min-width: 0;
+    }
+    .st-filters .st-date-range {
+        min-width: 200px;
+        max-width: 280px;
+    }
+    .st-filters .st-date-range input[type="hidden"] {
+        display: none !important;
+        height: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+    }
+    .st-filter-actions { display: flex; gap: 0.45rem; align-items: center; }
+    .st-list { padding: 0.75rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.55rem; }
+    .st-group {
+        border: 1px solid var(--border-default, rgba(255,255,255,0.08));
+        border-radius: 12px;
+        background: rgba(0,0,0,0.18);
+        overflow: hidden;
+    }
+    .st-group-head {
+        display: grid;
+        grid-template-columns: 28px 1fr auto;
+        gap: 0.75rem;
+        align-items: center;
+        padding: 0.85rem 1rem;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .st-group-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-shrink: 0;
+    }
+    .st-group-head:hover { background: rgba(255,255,255,0.03); }
+    .st-chevron {
+        width: 28px; height: 28px; border: 0; background: transparent; color: #a1a1aa;
+        font-size: 0.85rem; cursor: pointer;
+    }
+    .st-group.is-open .st-chevron { transform: rotate(90deg); }
+    .st-group-title { font-weight: 600; color: var(--text-primary, #f4f4f5); }
+    .st-group-meta { font-size: 0.78rem; color: var(--text-secondary, #a1a1aa); margin-top: 0.2rem; }
+    .st-badge {
+        display: inline-flex; align-items: center; padding: 0.2rem 0.55rem; border-radius: 999px;
+        font-size: 0.72rem; font-weight: 700; text-transform: capitalize; white-space: nowrap;
+    }
+    .st-badge-pending { background: rgba(245,158,11,0.16); color: #fbbf24; }
+    .st-badge-completed { background: rgba(52,211,153,0.16); color: #34d399; }
+    .st-badge-failed { background: rgba(248,113,113,0.16); color: #f87171; }
+    .st-badge-in_progress { background: rgba(56,189,248,0.16); color: #38bdf8; }
+    .st-status-select {
+        appearance: none; -webkit-appearance: none;
+        border: 1px solid transparent; border-radius: 999px;
+        padding: 0.22rem 1.55rem 0.22rem 0.6rem;
+        font-size: 0.72rem; font-weight: 700; cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.45rem center;
+        background-size: 10px;
+        min-width: 8.5rem;
+    }
+    .st-status-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.35); }
+    .st-status-select.st-badge-pending { background-color: rgba(245,158,11,0.16); color: #fbbf24; }
+    .st-status-select.st-badge-completed { background-color: rgba(52,211,153,0.16); color: #34d399; }
+    .st-status-select.st-badge-failed { background-color: rgba(248,113,113,0.16); color: #f87171; }
+    .st-status-select.st-badge-in_progress { background-color: rgba(56,189,248,0.16); color: #38bdf8; }
+    html.light-theme .st-status-select.st-badge-pending,
+    html.light-theme .st-badge-pending { background-color: #fef3c7; color: #b45309; }
+    html.light-theme .st-status-select.st-badge-completed,
+    html.light-theme .st-badge-completed { background-color: #d1fae5; color: #047857; }
+    html.light-theme .st-status-select.st-badge-failed,
+    html.light-theme .st-badge-failed { background-color: #fee2e2; color: #b91c1c; }
+    html.light-theme .st-status-select.st-badge-in_progress,
+    html.light-theme .st-badge-in_progress { background-color: #e0f2fe; color: #0369a1; }
+    .st-children {
+        display: none; border-top: 1px solid var(--border-default, rgba(255,255,255,0.06));
+        padding: 0.35rem 0.5rem 0.55rem;
+    }
+    .st-group.is-open .st-children { display: block; }
+    .st-script-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 0.65rem;
+        align-items: center;
+        padding: 0.65rem 0.75rem;
+        border-radius: 8px;
+    }
+    .st-script-row:hover { background: rgba(255,255,255,0.03); }
+    .st-script-name { font-size: 0.88rem; color: #e4e4e7; font-weight: 500; }
+    .st-script-sub { font-size: 0.75rem; color: #71717a; margin-top: 0.15rem; font-family: ui-monospace, monospace; }
+    .st-chat-btn {
+        width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+        border: 1px solid var(--border-default, rgba(255,255,255,0.1));
+        background: rgba(99,102,241,0.12); color: #818cf8;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .st-chat-btn:hover { background: rgba(99,102,241,0.22); }
+    .st-chat-actions {
+        display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.75rem 0 1rem;
+    }
+    .st-chat-action {
+        border: 1px solid var(--border-default, rgba(255,255,255,0.12));
+        background: rgba(255,255,255,0.04); color: #e4e4e7;
+        border-radius: 999px; padding: 0.28rem 0.7rem; font-size: 0.75rem;
+        font-weight: 600; cursor: pointer;
+    }
+    .st-chat-action.is-on { background: rgba(99,102,241,0.2); border-color: #6366f1; color: #c7d2fe; }
+    #stChatModal textarea {
+        width: 100%; min-height: 88px; resize: vertical; box-sizing: border-box;
+        border-radius: 8px; padding: 0.65rem 0.75rem; font: inherit; font-size: 0.88rem;
+        background: var(--bg-sunken, rgba(9,9,11,0.55)); color: var(--text-primary, #f4f4f5);
+        border: 1px solid var(--border-default, rgba(255,255,255,0.1));
+    }
+    html.light-theme .st-chat-btn { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    html.light-theme .st-chat-action { background: #f8fafc; color: #0f172a; border-color: #e2e8f0; }
+    html.light-theme #stChatModal textarea { background: #fff; color: #0f172a; border-color: #e2e8f0; }
+    .st-user-card {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 0.75rem;
+        align-items: center;
+        padding: 0.95rem 1.05rem;
+        border: 1px solid var(--border-default, rgba(255,255,255,0.08));
+        border-radius: 12px;
+        background: rgba(0,0,0,0.18);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+        text-align: left;
+        width: 100%;
+        color: inherit;
+        font: inherit;
+    }
+    .st-user-card:hover {
+        background: rgba(255,255,255,0.04);
+        border-color: rgba(99,102,241,0.35);
+    }
+    .st-user-card .st-open-hint {
+        font-size: 0.75rem; color: #a1a1aa; white-space: nowrap;
+    }
+    .st-crumb {
+        display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+        margin-bottom: 0.85rem; font-size: 0.85rem;
+    }
+    .st-crumb button {
+        background: none; border: 0; color: #818cf8; cursor: pointer; padding: 0;
+        font: inherit; font-weight: 600;
+    }
+    .st-crumb button:hover { text-decoration: underline; }
+    .st-crumb span { color: var(--text-secondary, #a1a1aa); }
+    .st-crumb strong { color: var(--text-primary, #f4f4f5); }
+    .st-subhead {
+        display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem;
+        margin: 1rem 0 0.55rem; padding: 0 0.15rem;
+    }
+    .st-subhead h5 {
+        margin: 0; font-size: 0.92rem; font-weight: 700; color: var(--text-primary, #f4f4f5);
+        letter-spacing: 0.01em;
+    }
+    .st-subhead p { margin: 0; font-size: 0.78rem; color: var(--text-secondary, #a1a1aa); }
+    .st-scripts-flat {
+        display: flex; flex-direction: column; gap: 0.2rem;
+        border: 1px solid var(--border-default, rgba(255,255,255,0.08));
+        border-radius: 12px;
+        background: rgba(0,0,0,0.12);
+        padding: 0.35rem 0.4rem;
+    }
+    .st-view[hidden] { display: none !important; }
+    html.light-theme .st-section,
+    html.light-theme .st-kpi,
+    html.light-theme .st-group,
+    html.light-theme .st-user-card,
+    html.light-theme .st-scripts-flat {
+        background: #fff;
+        border-color: #e2e8f0;
+    }
+    html.light-theme .st-filters {
+        background: #f8fafc;
+        border-color: #e2e8f0;
+    }
+    html.light-theme .st-filters select,
+    html.light-theme .st-filters input {
+        background: #fff;
+        border-color: #e2e8f0;
+        color: #0f172a;
+    }
+    html.light-theme .st-group-title,
+    html.light-theme .st-script-name,
+    html.light-theme .st-kpi b,
+    html.light-theme .st-section-head h4,
+    html.light-theme .st-subhead h5,
+    html.light-theme .st-crumb strong { color: #0f172a; }
+    html.light-theme .st-group { background: #f8fafc; }
+    html.light-theme .st-lede,
+    html.light-theme .st-group-meta,
+    html.light-theme .st-section-head p,
+    html.light-theme .st-subhead p,
+    html.light-theme .st-script-sub,
+    html.light-theme .st-open-hint,
+    html.light-theme .st-kpi span,
+    html.light-theme .st-crumb span,
+    html.light-theme .st-chevron,
+    html.light-theme .st-filters label,
+    html.light-theme .ring-label,
+    html.light-theme .stack-meta,
+    html.light-theme .wl-item-meta,
+    html.light-theme .reports-scope-banner { color: #64748b; }
+    html.light-theme .st-user-card:hover,
+    html.light-theme .st-group-head:hover,
+    html.light-theme .st-script-row:hover { background: #f1f5f9; }
+    html.light-theme .st-chat-action.is-on {
+        background: #eef2ff;
+        border-color: #6366f1;
+        color: #4338ca;
+    }
+    html.light-theme .wl-chip.bad {
+        background: #fef2f2;
+        border-color: #fecaca;
+    }
+    html.light-theme .wl-chip.ok {
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+    }
+    html.light-theme .reports-scope-banner { color: #0f172a !important; }
+    html.light-theme .reports-scope-banner strong { color: #1d4ed8 !important; }
+
+    .rpt-dialog {
+        background: rgba(24, 24, 27, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #e4e4e7;
+    }
+    .rpt-field {
+        background: rgba(9, 9, 11, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #f4f4f5;
+    }
+    .rpt-folder-path { color: #e4e4e7; }
+    .rpt-dialog-title { color: #f4f4f5; }
+    .rpt-icon-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: none;
+        color: #a1a1aa;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .rpt-row-actions {
+        display: inline-grid;
+        grid-template-columns: 3.5rem 32px;
+        column-gap: 0.4rem;
+        align-items: center;
+        justify-items: end;
+        min-height: 32px;
+    }
+    .rpt-row-actions-view,
+    .rpt-row-actions-rerun {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .rpt-row-actions-rerun {
+        width: 32px;
+    }
+    .rpt-row-actions .js-report-rerun { margin: 0; display: inline-flex; }
+    .rpt-action-icon {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 8px;
+        border: 1px solid rgba(96, 165, 250, 0.35);
+        background: rgba(96, 165, 250, 0.12);
+        color: #93c5fd;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .rpt-action-icon:hover {
+        background: rgba(96, 165, 250, 0.22);
+        color: #bfdbfe;
+    }
+    .rpt-row-actions .js-show-error-details {
+        padding: 0.3rem 0.8rem;
+        height: 32px;
+        font-size: 0.8rem;
+        line-height: 1;
+        box-sizing: border-box;
+    }
+    html.light-theme .rpt-action-icon {
+        border-color: #93c5fd;
+        background: #eff6ff;
+        color: #2563eb;
+    }
+    .rpt-heading { color: #f4f4f5; }
+    .rpt-muted { color: #71717a; }
+    .rpt-strong { color: #e4e4e7; }
+    .wl-expand-btn { color: #a1a1aa; }
+    .wl-folder-name { color: #e4e4e7; }
+    .rpt-pre {
+        background: rgba(9, 9, 11, 0.5);
+        padding: 1.5rem;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        color: #a1a1aa;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.8rem;
+    }
+    .rpt-sunken {
+        background: rgba(9, 9, 11, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    html.light-theme #stChatModal > div,
+    html.light-theme #errorModal > div,
+    html.light-theme #addFolderWatchlistModal > div,
+    html.light-theme #allFoldersModal > div,
+    html.light-theme .rpt-dialog {
+        background: #ffffff !important;
+        border-color: #e2e8f0 !important;
+        color: #0f172a !important;
+        box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.18);
+    }
+    html.light-theme #stChatModal h3,
+    html.light-theme #errorModal h3,
+    html.light-theme #addFolderWatchlistModal h3,
+    html.light-theme #allFoldersModal h3,
+    html.light-theme .rpt-dialog-title,
+    html.light-theme .rpt-heading,
+    html.light-theme .rpt-strong,
+    html.light-theme .wl-folder-name {
+        color: #0f172a !important;
+    }
+    html.light-theme .rpt-icon-btn,
+    html.light-theme .rpt-dialog-close {
+        background: #f1f5f9 !important;
+        color: #475569 !important;
+        border-color: #e2e8f0 !important;
+    }
+    html.light-theme #stChatModal > div > div:first-child,
+    html.light-theme #errorModal > div > div:first-child,
+    html.light-theme #addFolderWatchlistModal > div > div:first-child,
+    html.light-theme #allFoldersModal > div > div:first-child,
+    html.light-theme .rpt-dialog > div:first-child,
+    html.light-theme #addFolderWatchlistModal > div > div:last-child {
+        border-color: #e2e8f0 !important;
+    }
+    html.light-theme #errorModalBody,
+    html.light-theme #addFolderWatchlistModal > div > div:nth-child(2),
+    html.light-theme #wlSelectedLabel,
+    html.light-theme .rpt-muted,
+    html.light-theme .wl-expand-btn {
+        color: #64748b !important;
+    }
+    html.light-theme #wlWorkerSelect,
+    html.light-theme #wlFolderSearch,
+    html.light-theme .rpt-field {
+        background: #ffffff !important;
+        border-color: #e2e8f0 !important;
+        color: #0f172a !important;
+    }
+    html.light-theme #wlFolderContainer,
+    html.light-theme .rpt-sunken {
+        background: #f8fafc !important;
+        border-color: #e2e8f0 !important;
+    }
+    html.light-theme .rpt-pre {
+        background: #f8fafc !important;
+        border-color: #e2e8f0 !important;
+        color: #0f172a !important;
+    }
+    html.light-theme .rpt-dialog td,
+    html.light-theme #allFoldersModal .rpt-folder-path {
+        color: #0f172a !important;
+    }
+    html.light-theme .rpt-dialog tr { border-bottom-color: #e2e8f0 !important; }
+    @media (max-width: 800px) {
+        .st-group-head { grid-template-columns: 28px 1fr auto; }
+        .st-script-row { grid-template-columns: 1fr; }
+        .st-user-card { grid-template-columns: 1fr; }
+    }
+</style>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/reports.css') }}?v=kpi-compact-1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        applyReportsHashTab(true);
+    });
+</script>
+
+<div class="reports-scope">
+    <!-- Filters -->
+    <form class="filters-bar" method="GET" action="{{ url_for('web.reports') }}" id="reportsFiltersForm">
+        <input type="hidden" name="limit" id="reportsLimitField" value="{{ limit|default(10) }}">
+        {% if folder_filter %}
+        <input type="hidden" name="folder_path" value="{{ folder_filter }}">
+        {% endif %}
+        <div class="filter-group">
+            <label for="reportsScriptSearch">Search script</label>
+            <input type="search" name="search" id="reportsScriptSearch" class="filter-input"
+                   value="{{ search or '' }}" placeholder="Script name…" autocomplete="off">
+        </div>
+
+        <div class="filter-group">
+            <label>Worker</label>
+            <select name="job_worker" class="filter-input">
+                <option value="">All Workers</option>
+                {% for w in workers %}
+                <option value="{{ w.worker_name }}" {% if worker_filter == w.worker_name %}selected{% endif %}>{{ w.worker_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Status</label>
+            <select name="job_status" class="filter-input">
+                <option value="">All Statuses</option>
+                <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                <option value="stopped" {% if status_filter == 'stopped' %}selected{% endif %}>Stopped</option>
+                <option value="error" {% if status_filter == 'error' %}selected{% endif %}>Error</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Processed</label>
+            <select name="processed_lt" class="filter-input">
+                <option value="">Any count</option>
+                <option value="1" {% if processed_lt_filter == 1 or processed_lt_filter == '1' %}selected{% endif %}>Less than 1 (0 files)</option>
+                <option value="50" {% if processed_lt_filter == 50 or processed_lt_filter == '50' %}selected{% endif %}>Less than 50</option>
+                <option value="100" {% if processed_lt_filter == 100 or processed_lt_filter == '100' %}selected{% endif %}>Less than 100</option>
+                <option value="200" {% if processed_lt_filter == 200 or processed_lt_filter == '200' %}selected{% endif %}>Less than 200</option>
+                <option value="500" {% if processed_lt_filter == 500 or processed_lt_filter == '500' %}selected{% endif %}>Less than 500</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Errors</label>
+            <select name="has_errors" class="filter-input">
+                <option value="">Any</option>
+                <option value="1" {% if has_errors_filter == '1' %}selected{% endif %}>Has errors</option>
+            </select>
+        </div>
+
+        <div class="filter-group custom-date" style="flex: 1 1 220px; min-width: 200px; max-width: 280px;">
+            <label for="dateRangeInput">Date range</label>
+            <input type="text" id="dateRangeInput" class="filter-input"
+                   placeholder="Start → End" autocomplete="off">
+            <input type="hidden" name="date_from" id="dateFromInput" value="{{ date_from or '' }}">
+            <input type="hidden" name="date_to" id="dateToInput" value="{{ date_to or '' }}">
+        </div>
+
+        <div class="filter-actions">
+            <button type="submit" class="btn-apply">Apply</button>
+            <a href="{{ url_for('web.reports') }}" class="btn-reset" title="Clear all filters">Reset</a>
+        </div>
+    </form>
+
+    <!-- Main Navigation Tabs -->
+    <div class="tabs-container">
+        <button class="tab-btn active" onclick="switchTab('history', this)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            Execution History
+        </button>
+        <button class="tab-btn" onclick="switchTab('analytics', this)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+            Analytics & Insights
+        </button>
+        <button class="tab-btn" onclick="switchTab('watchlist', this)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            Watchlist
+        </button>
+        
+
+    </div>
+
+    <!-- TAB 1: Execution History -->
+    <div id="tab-history" class="tab-content active">
+        {% if worker_filter or folder_filter %}
+        <div class="reports-scope-banner" style="margin: 0 0 1rem; padding: 0.75rem 1rem; border: 1px solid rgba(96,165,250,0.35); background: rgba(96,165,250,0.08); border-radius: 10px; color: #e4e4e7; font-size: 0.9rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+            <strong style="color:#93c5fd;">Active scope</strong>
+            {% if worker_filter %}<span>Worker: <code>{{ worker_filter }}</code></span>{% endif %}
+            {% if folder_filter %}<span>Folder: <code title="{{ folder_filter }}">{{ folder_filter }}</code></span>{% endif %}
+            <span style="opacity:0.8;">{{ total_count }} matching run{{ '' if total_count == 1 else 's' }}</span>
+            <a href="{{ url_for('web.reports') }}#history" class="btn-reset" style="margin-left:auto;">Clear</a>
+        </div>
+        {% endif %}
+        
+        <!-- Quick KPIs -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="kpi-label">Total Executions</div>
+                <div class="kpi-value">{{ total_count }}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                </div>
+                <div class="kpi-label">Completed Files</div>
+                <div class="kpi-value">{{ summary.total_downloads or 0 }}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <div class="kpi-label">Failed Files</div>
+                <div class="kpi-value">{{ summary.total_failed_downloads or 0 }}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                </div>
+                <div class="kpi-label">Completed Jobs</div>
+                <div class="kpi-value">{{ summary.total_success_runs or 0 }}</div>
+            </div>
+        </div>
+
+        <!-- Main Data Table (soft-paginated via #reportsHistoryCard) -->
+        <div class="reports-table-card" id="reportsHistoryCard">
+            <div style="overflow-x: auto;">
+                <table class="glass-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Worker</th>
+                            <th>Script</th>
+                            <th>Status</th>
+                            <th>Time</th>
+                            <th>Duration</th>
+                            <th>Image Count</th>
+                            <th>Doc Count</th>
+                            <th>Failed DLs</th>
+                            <th>Processed</th>
+                            <th>Errors</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in reports %}
+                        <tr>
+                            <td style="color: #71717a;">#{{ r.id }}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <div style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1;"></div>
+                                    {{ r.worker_name }}
+                                </div>
+                            </td>
+                            <td>{{ r.script_name }}</td>
+                            <td>
+                                {% if r.status == 'completed' %}
+                                    <span class="badge success">Completed</span>
+                                {% elif r.status == 'error' %}
+                                    <span class="badge error">Failed</span>
+                                    {% if r.primary_error_category %}
+                                    <div style="font-size: 0.75rem; color: #f87171; margin-top: 4px; line-height: 1.2;">
+                                        {{ r.primary_error_category }}
+                                    </div>
+                                    {% endif %}
+                                {% elif r.status == 'stopped' %}
+                                    <span class="badge warning">Stopped</span>
+                                    <div style="font-size: 0.75rem; color: #fbbf24; margin-top: 4px; line-height: 1.2;">
+                                        {{ r.primary_error_category or 'User Interrupted' }}
+                                    </div>
+                                {% else %}
+                                    <span class="badge warning">{{ r.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ r.start_time | human_dt }}</td>
+                            <td>{{ r.duration | human_duration }}</td>
+                            <td><span class="badge" style="background: rgba(59, 130, 246, 0.1); color: #60A5FA;">{{ r.image_count or 0 }}</span></td>
+                            <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #34D399;">{{ r.pdf_count or 0 }}</span></td>
+                            <td>
+                                {% if (r.failed_downloads or 0) > 0 %}
+                                    <span class="badge error">{{ r.failed_downloads }}</span>
+                                {% else %}
+                                    <span style="color: #71717a;">0</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-weight: bold; color: #e4e4e7;">{{ (r.image_count or 0) + (r.pdf_count or 0) }} files</td>
+                            <td>
+                                {% if (r.error_count or 0) > 0 %}
+                                    <span style="color: #f87171; font-weight: 600;">{{ r.error_count }}</span>
+                                {% else %}
+                                    <span style="color: #71717a;">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set has_details = r.error_details and (r.error_details|string|trim) not in ('', 'null', '{}', '[]') %}
+                                <div class="rpt-row-actions">
+                                    <div class="rpt-row-actions-view">
+                                    {% if r.status == 'error' or r.status == 'stopped' or (r.error_count or 0) > 0 or has_details %}
+                                    <template id="report-err-{{ r.id }}">{{ r.error_details | report_error_json }}</template>
+                                    <button type="button" class="btn-apply js-show-error-details"
+                                            data-report-id="{{ r.id }}"
+                                            data-report-status="{{ r.status }}">
+                                        View
+                                    </button>
+                                    {% endif %}
+                                    </div>
+                                    <div class="rpt-row-actions-rerun">
+                                    {% if r.script_id %}
+                                    <form action="{{ url_for('web.run_script') }}" method="post" class="js-report-rerun">
+                                        <input type="hidden" name="script_id" value="{{ r.script_id }}">
+                                        {% if r.job_id %}
+                                        <input type="hidden" name="source_job_id" value="{{ r.job_id }}">
+                                        {% endif %}
+                                        {% if r.schedule_id %}
+                                        <input type="hidden" name="schedule_id" value="{{ r.schedule_id }}">
+                                        {% endif %}
+                                        <input type="hidden" name="next" value="{{ url_for('web.reports', page=page, limit=limit, search=search, job_worker=worker_filter, job_status=status_filter, date_from=date_from, date_to=date_to, folder_path=folder_filter, has_errors=has_errors_filter, processed_lt=processed_lt_filter) }}#history">
+                                        <button type="submit" class="rpt-action-icon" title="Re-run script" aria-label="Re-run script">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <polyline points="23 4 23 10 17 10"></polyline>
+                                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="12" style="text-align: center; padding: 3rem; color: #71717a;">
+                                No reports found matching your criteria.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if total_count > 0 %}
+            {% set page_start = ((page - 1) * limit) + 1 %}
+            {% set page_end = page * limit if page * limit < total_count else total_count %}
+            {% set hist_hash = '#history' %}
+            <div class="reports-pagination">
+                <div class="reports-pagination-left">
+                    <div class="pagination-info">Showing {{ page_start }}–{{ page_end }} of {{ total_count }}</div>
+                    <label class="pagination-info reports-page-size-label">
+                        Per page
+                        <select class="filter-input reports-page-size" onchange="changeReportsPageSize(this.value)">
+                            <option value="10" {% if limit == 10 %}selected{% endif %}>10</option>
+                            <option value="25" {% if limit == 25 %}selected{% endif %}>25</option>
+                            <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                            <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="pagination-controls">
+                    <a class="pagination-btn {% if page <= 1 %}disabled{% endif %}"
+                       href="{% if page > 1 %}{{ url_for('web.reports', page=page-1, limit=limit, search=search, job_worker=worker_filter, job_status=status_filter, date_from=date_from, date_to=date_to, folder_path=folder_filter, has_errors=has_errors_filter, processed_lt=processed_lt_filter) }}{{ hist_hash }}{% else %}#{% endif %}">‹</a>
+                    {% set window = 2 %}
+                    {% for p in range(1, total_pages + 1) %}
+                        {% if p == 1 or p == total_pages or (p >= page - window and p <= page + window) %}
+                            <a class="pagination-btn {% if p == page %}active{% endif %}"
+                               href="{{ url_for('web.reports', page=p, limit=limit, search=search, job_worker=worker_filter, job_status=status_filter, date_from=date_from, date_to=date_to, folder_path=folder_filter, has_errors=has_errors_filter, processed_lt=processed_lt_filter) }}{{ hist_hash }}">{{ p }}</a>
+                        {% elif p == page - window - 1 or p == page + window + 1 %}
+                            <span class="pagination-dots">…</span>
+                        {% endif %}
+                    {% endfor %}
+                    <a class="pagination-btn {% if page >= total_pages %}disabled{% endif %}"
+                       href="{% if page < total_pages %}{{ url_for('web.reports', page=page+1, limit=limit, search=search, job_worker=worker_filter, job_status=status_filter, date_from=date_from, date_to=date_to, folder_path=folder_filter, has_errors=has_errors_filter, processed_lt=processed_lt_filter) }}{{ hist_hash }}{% else %}#{% endif %}">›</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- TAB 2: Analytics & Insights -->
+    <div id="tab-analytics" class="tab-content">
+        <div class="kpi-grid insights-kpi">
+            <div class="kpi-card">
+                <div class="kpi-label">Success rate</div>
+                <div class="kpi-value">{{ error_analytics.completion_pct or 0 }}%</div>
+                <div class="kpi-sub">{{ error_analytics.success_runs or summary.total_success_runs or 0 }} of {{ error_analytics.total_runs or total_count }} runs completed</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Failed runs</div>
+                <div class="kpi-value" style="color:#f87171;">{{ error_analytics.error_runs or summary.total_error_runs or 0 }}</div>
+                <div class="kpi-sub">Fail rate {{ error_analytics.fail_rate or 0 }}%</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Failed downloads</div>
+                <div class="kpi-value" style="color:#fbbf24;">{{ error_analytics.total_failed_downloads or summary.total_failed_downloads or 0 }}</div>
+                <div class="kpi-sub">Across filtered executions</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Locations tracked</div>
+                <div class="kpi-value">{{ error_analytics.folder_health|length }}</div>
+                <div class="kpi-sub">Distinct report folders</div>
+            </div>
+        </div>
+
+        <div class="analytics-grid">
+            <!-- Overall Health ring -->
+            <div class="analytics-panel">
+                <h3 class="panel-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    Run outcome mix
+                </h3>
+                <div class="ring-wrap">
+                    <div class="ring-chart">
+                        <svg viewBox="0 0 36 36" class="ring-svg">
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3" />
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#34d399" stroke-width="3" stroke-dasharray="{{ error_analytics.completion_pct or 0 }}, 100" />
+                        </svg>
+                        <div class="ring-center">
+                            <span class="ring-pct">{{ error_analytics.completion_pct or 0 }}%</span>
+                            <span class="ring-label">success</span>
+                        </div>
+                    </div>
+                    <div class="ring-legend">
+                        <div><span class="dot ok"></span> Completed <strong>{{ error_analytics.success_runs or 0 }}</strong></div>
+                        <div><span class="dot bad"></span> Error <strong>{{ error_analytics.error_runs or 0 }}</strong></div>
+                        <div><span class="dot other"></span> Other <strong>{{ error_analytics.other_runs or 0 }}</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Folder Health -->
+            <div class="analytics-panel">
+                <div class="panel-head">
+                    <h3 class="panel-title" style="margin: 0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        Script run locations
+                    </h3>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openAllFoldersModal()">View all</button>
+                </div>
+                <div class="stack-list">
+                    {% for folder, data in (error_analytics.folder_health.items() | list)[:6] %}
+                    {% set total = (data.success or 0) + (data.failed or 0) %}
+                    {% set pct = (data.success / total * 100) if total > 0 else 0 %}
+                    <div class="stack-row">
+                        <div class="stack-row-top">
+                            <span class="stack-path" title="{{ folder or 'Unassigned' }}">
+                                {% if folder %}{{ folder }}{% else %}<em>[Unassigned folder]</em>{% endif %}
+                            </span>
+                            <span class="stack-meta">{{ data.success }}/{{ total }} ok</span>
+                        </div>
+                        <div class="stack-bar">
+                            <div class="js-progress-fill stack-bar-fill" data-width="{{ pct }}"></div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="empty-hint">No folder data for these filters.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Common Errors -->
+            <div class="analytics-panel">
+                <div class="panel-head">
+                    <h3 class="panel-title" style="margin: 0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        Most common errors
+                    </h3>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openAllErrorsModal()">View all</button>
+                </div>
+                <table class="insight-table">
+                    {% for error_type, count in (error_analytics.common_errors.items() | list)[:6] %}
+                    <tr>
+                        <td class="mono">{{ error_type }}</td>
+                        <td class="num"><span class="badge error">{{ count }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="2" class="empty-hint">No errors in this timeframe.</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            
+            <!-- Failed Scripts -->
+            <div class="analytics-panel">
+                <div class="panel-head">
+                    <h3 class="panel-title" style="margin: 0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        Failed scripts
+                    </h3>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openAllScriptsModal()">View all</button>
+                </div>
+                <table class="insight-table">
+                    {% for script, count in (error_analytics.script_errors.items() | list)[:6] %}
+                    <tr>
+                        <td>{{ script }}</td>
+                        <td class="num"><span class="badge warning">{{ count }} fails</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="2" class="empty-hint">No scripts failed for these filters.</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- TAB 3: Watchlist -->
+    <div id="tab-watchlist" class="tab-content">
+        <div class="watchlist-shell">
+            <div class="watchlist-toolbar">
+                <div>
+                    <h3 class="panel-title" style="margin: 0 0 0.35rem 0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        Tracked items
+                    </h3>
+                    <p class="watchlist-intro">Track worker folders. Health and Reports use the same scraper runs as this page — scoped by worker + folder path (including scripts under that folder).</p>
+                </div>
+                <div class="watchlist-actions">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openAddFolderWatchlistModal()">Add folder</button>
+                    <button type="button" class="btn-ghost-sm" onclick="loadWatchlist()">Refresh</button>
+                </div>
+            </div>
+
+            <div class="watchlist-filters">
+                <input type="search" id="wlSearchInput" class="filter-input" placeholder="Filter by path…" oninput="filterWatchlistUI()" style="flex:1; min-width:160px;">
+                <select id="wlStatusFilter" class="filter-input" onchange="filterWatchlistUI()" style="max-width:160px;">
+                    <option value="all">All statuses</option>
+                    <option value="failing">Failing only</option>
+                    <option value="healthy">Healthy only</option>
+                </select>
+                <div class="wl-counts" id="wlCounts">
+                    <span class="wl-chip">Total {{ watchlist_files|length }}</span>
+                </div>
+            </div>
+
+            <div id="watchlist-container" class="watchlist-list">
+                <div class="empty-hint">Loading watchlist…</div>
+            </div>
+            <div id="watchlistPagination" class="reports-pagination" style="display:none; margin-top: 0.75rem; border-radius: 0 0 10px 10px;">
+                <div class="pagination-info" id="wlPageInfo"></div>
+                <div class="pagination-controls" id="wlPageControls"></div>
+            </div>
+        </div>
+    </div>
+
+
+
+    {% if current_user.role == 'admin' %}
+    <!-- TAB 4: Admin Schedule Tracking -->
+<div id="tab-schedule-tracking" class="tab-content">
+        <div class="st-shell">
+            <div class="st-hero">
+                <div>
+                    <h3 class="panel-title" style="margin:0 0 0.35rem;">Schedule Tracking</h3>
+                    <p class="st-lede">Open a user to see their Scheduler Folders and individual Scheduler scripts. Folder members stay under folders; regular schedules list directly.</p>
+                </div>
+                <div class="st-kpis" id="stSummary">
+                    <div class="st-kpi"><b id="stSumUsers">—</b><span>Users</span></div>
+                    <div class="st-kpi"><b id="stSumFolders">—</b><span>Folders</span></div>
+                    <div class="st-kpi"><b id="stSumScripts">—</b><span>Individual scripts</span></div>
+                </div>
+            </div>
+
+            <section class="st-section" aria-labelledby="st-main-title">
+                <div class="st-section-head">
+                    <div>
+                        <h4 id="st-main-title">Users</h4>
+                        <p>Each user is a container for Folder Scheduler groups and individual Scheduler scripts.</p>
+                    </div>
+                </div>
+                <div class="st-filters" id="stFilters">
+                    <label>User<select id="stUser"><option value="">All users</option></select></label>
+                    <label>Worker<select id="stWorker"><option value="">All workers</option></select></label>
+                    <label>Search<input type="search" id="stSearch" placeholder="Script, folder, worker…"></label>
+                    <label>Status
+                        <select id="stStatus">
+                            <option value="">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </label>
+                    <label class="st-date-range">Date range
+                        <input type="text" id="stDateRange" class="flatpickr-date" placeholder="Start → End" autocomplete="off">
+                        <input type="hidden" id="stFrom" value="">
+                        <input type="hidden" id="stTo" value="">
+                    </label>
+                    <div class="st-filter-actions">
+                        <button type="button" class="btn-apply" id="stApply">Apply</button>
+                        <button type="button" class="btn-reset" id="stReset">Reset</button>
+                    </div>
+                </div>
+
+                <!-- Level 0: user list -->
+                <div id="stUsersView" class="st-view st-list">
+                    <div class="empty-hint">Loading users…</div>
+                </div>
+
+                <!-- Level 1: selected user container -->
+                <div id="stUserDetailView" class="st-view st-list" hidden>
+                    <div class="st-crumb" id="stCrumb">
+                        <button type="button" id="stBackUsers">Users</button>
+                        <span>/</span>
+                        <strong id="stCrumbUser">—</strong>
+                    </div>
+                    <div id="stUserDetailBody"></div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<div id="stChatModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 9999; align-items: center; justify-content: center; padding: 2rem;">
+    <div class="rpt-dialog" style="border-radius: 16px; width: 520px; max-width: 100%; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);">
+        <div style="padding: 1.15rem 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="stChatTitle" class="rpt-dialog-title" style="margin: 0; font-size: 1.05rem; font-weight: 600;">Script chat</h3>
+            <button type="button" class="rpt-icon-btn" onclick="closeStChatModal()">×</button>
+        </div>
+        <div style="padding: 1.15rem 1.25rem;">
+            <div id="stChatMeta" class="st-group-meta" style="margin-bottom: 0.75rem;">—</div>
+            <div class="st-chat-actions" id="stChatActions">
+                <button type="button" class="st-chat-action is-on" data-action="bug">Bug</button>
+                <button type="button" class="st-chat-action" data-action="failed">Failed</button>
+                <button type="button" class="st-chat-action" data-action="recheck">Recheck</button>
+                <button type="button" class="st-chat-action" data-action="maintenance">Maintenance</button>
+                <button type="button" class="st-chat-action" data-action="testing">Testing</button>
+                <button type="button" class="st-chat-action" data-action="completed">Completed</button>
+                <button type="button" class="st-chat-action" data-action="pending">Pending</button>
+            </div>
+            <label class="st-group-meta" style="display:block; margin-bottom:0.35rem;">Message</label>
+            <textarea id="stChatMessage" placeholder="Write a note for this user / schedule…"></textarea>
+            <div id="stChatError" class="empty-hint" style="color:#f87171; display:none; margin-top:0.5rem;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.9rem;">
+                <button type="button" class="btn-reset" onclick="closeStChatModal()">Cancel</button>
+                <button type="button" class="btn-apply" id="stChatSend">Send to chat</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Shared modals (all roles — must stay outside admin-only schedule-tracking block) -->
+<!-- Beautiful Modal -->
+<div id="errorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 9999; align-items: center; justify-content: center; padding: 2rem;">
+    <div class="rpt-dialog" style="border-radius: 16px; width: 800px; max-width: 100%; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);">
+        <div style="padding: 1.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="errorModalTitle" class="rpt-dialog-title" style="margin: 0; font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.75rem;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="width:24px; height:24px;">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                Execution Diagnostics
+            </h3>
+            <button type="button" class="rpt-icon-btn" onclick="document.getElementById('errorModal').style.display='none'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div id="errorModalBody" class="rpt-muted" style="padding: 1.5rem; overflow-y: auto; font-size: 0.9rem;">
+            <!-- Rendered via JS -->
+        </div>
+    </div>
+</div>
+
+<!-- Add Folder to Watchlist Modal -->
+<div id="addFolderWatchlistModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 9999; align-items: center; justify-content: center; padding: 2rem;">
+    <div class="rpt-dialog" style="border-radius: 16px; width: 600px; max-width: 100%; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);">
+        <div style="padding: 1.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="rpt-dialog-title" style="margin: 0; font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.75rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                Track a Folder
+            </h3>
+            <button type="button" class="rpt-icon-btn" onclick="document.getElementById('addFolderWatchlistModal').style.display='none'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="rpt-muted" style="padding: 1.5rem; font-size: 0.9rem;">
+            <label class="form-label">1. Select Worker</label>
+            <select id="wlWorkerSelect" class="form-select rpt-field" style="width: 100%; margin-bottom: 1rem; padding: 0.5rem; border-radius: 8px;" onchange="loadWatchlistWorkerFolders()">
+                <option value="">-- Choose a worker --</option>
+                {% for w in workers %}
+                <option value="{{ w.worker_name }}">{{ w.worker_name }} {% if w.status == 'online' %}(Online){% endif %}</option>
+                {% endfor %}
+            </select>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 0.5rem; flex-wrap: wrap;">
+                <label class="form-label" style="margin: 0;">2. Browse / search folders</label>
+                <input type="text" id="wlFolderSearch" class="rpt-field" placeholder="Search folders…" onkeyup="onWatchlistFolderSearchKey(event)" style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; width: 220px;">
+            </div>
+            <p class="rpt-muted" style="margin: 0 0 0.5rem; font-size: 0.78rem;">Scheduler folders come from script paths (add/remove scripts updates the list). Worker folders are the live FS tree — expand ▶ as needed.</p>
+            <div id="wlFolderContainer" class="rpt-sunken" style="border-radius: 8px; padding: 0.75rem; max-height: 420px; overflow-y: auto;">
+                <div class="rpt-muted" style="text-align: center;">Select a worker to view folders.</div>
+            </div>
+            
+            <input type="hidden" id="wlSelectedFolder">
+            <div id="wlSelectedLabel" class="rpt-muted" style="margin-top: 0.75rem; font-size: 0.85rem;">Selected: <span class="rpt-strong">none</span></div>
+        </div>
+        <div style="padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: flex-end; gap: 1rem;">
+            <button type="button" class="btn btn-ghost" onclick="document.getElementById('addFolderWatchlistModal').style.display='none'">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="submitWatchlistFolder()">Track Folder</button>
+        </div>
+    </div>
+</div>
+
+<!-- All Folders Modal -->
+<div id="allFoldersModal" class="glass-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+    <div class="rpt-dialog" style="border-radius: 12px; width: 90%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+        <div style="padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+            <h3 class="rpt-dialog-title" style="margin: 0; font-size: 1.25rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" style="vertical-align: middle; margin-right: 8px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                All Folders Health
+            </h3>
+            <button class="btn btn-ghost" onclick="document.getElementById('allFoldersModal').style.display='none'">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div style="padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+            {% for folder, data in error_analytics.folder_health.items() %}
+            {% set total = data.success + data.failed %}
+            {% set pct = (data.success / total * 100) if total > 0 else 0 %}
+            <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.3rem;">
+                    <span class="rpt-folder-path" style="font-family: monospace; word-break: break-all; padding-right: 8px;">
+                        {% if folder %}{{ folder }}{% else %}<span class="rpt-muted" style="font-style: italic;">[Unassigned Folder]</span>{% endif %}
+                    </span>
+                    <span class="rpt-muted" style="white-space: nowrap;">{{ data.success }} / {{ total }}</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(239, 68, 68, 0.2); border-radius: 3px; overflow: hidden;">
+                    {% set w_attr = 'style="height: 100%; background: #34d399; border-radius: 3px; width: ' ~ pct ~ '%;"' %}
+                    <div {{ w_attr|safe }}></div>
+                </div>
+            </div>
+            {% else %}
+            <div class="rpt-muted" style="text-align: center;">No folder data available.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- All Errors Modal -->
+    <div id="allErrorsModal" class="glass-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+        <div class="rpt-dialog" style="border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+            <div style="padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="rpt-dialog-title" style="margin: 0; font-size: 1.25rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="vertical-align: middle; margin-right: 8px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                All Common Errors
+            </h3>
+            <button class="btn btn-ghost rpt-dialog-close" onclick="document.getElementById('allErrorsModal').style.display='none'">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div style="padding: 1.5rem; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                {% for error_type, count in error_analytics.common_errors.items() %}
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 1rem 0; font-size: 0.9rem; font-family: monospace;">{{ error_type }}</td>
+                    <td style="padding: 1rem 0; text-align: right;"><span class="badge error">{{ count }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="2" class="rpt-muted" style="text-align: center; padding: 2rem 0;">No errors logged.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- All Scripts Modal -->
+    <div id="allScriptsModal" class="glass-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+        <div class="rpt-dialog" style="border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+            <div style="padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="rpt-dialog-title" style="margin: 0; font-size: 1.25rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" style="vertical-align: middle; margin-right: 8px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                All Failed Scripts
+            </h3>
+            <button class="btn btn-ghost rpt-dialog-close" onclick="document.getElementById('allScriptsModal').style.display='none'">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div style="padding: 1.5rem; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                {% for script, count in error_analytics.script_errors.items() %}
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 1rem 0; font-size: 0.9rem;">{{ script }}</td>
+                    <td style="padding: 1rem 0; text-align: right;"><span class="badge warning">{{ count }} fails</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="2" class="rpt-muted" style="text-align: center; padding: 2rem 0;">No scripts failed.</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
+<script type="application/json" id="reports-cfg">{{ {
+    'worker': worker_filter or '',
+    'dateFrom': date_from or '',
+    'dateTo': date_to or '',
+    'watchlistUrl': url_for('api.get_watchlist'),
+    'schedulerFoldersUrl': url_for('api.watchlist_scheduler_folders'),
+    'scheduleTrackingUrl': url_for('api.admin_schedule_tracking') if current_user.role == 'admin' else '',
+    'scheduleTrackingStatusUrl': url_for('api.admin_schedule_tracking_status') if current_user.role == 'admin' else '',
+    'scheduleTrackingChatUrl': url_for('api.admin_schedule_tracking_chat') if current_user.role == 'admin' else '',
+    'isAdmin': current_user.role == 'admin',
+    'reportsUrl': url_for('web.reports'),
+    'toggleUrl': url_for('api.toggle_watchlist')
+}|tojson }}</script>
+<script>
+    const REPORTS_CFG = JSON.parse(document.getElementById('reports-cfg').textContent);
+
+    function openAddFolderWatchlistModal() {
+        document.getElementById('addFolderWatchlistModal').style.display = 'flex';
+        document.getElementById('wlWorkerSelect').value = REPORTS_CFG.worker || '';
+        document.getElementById('wlFolderContainer').innerHTML = '<div class="rpt-muted" style="text-align: center;">Select a worker to view folders.</div>';
+        document.getElementById('wlSelectedFolder').value = '';
+        const label = document.getElementById('wlSelectedLabel');
+        if (label) label.innerHTML = 'Selected: <span class="rpt-strong">none</span>';
+        const search = document.getElementById('wlFolderSearch');
+        if (search) search.value = '';
+        if (REPORTS_CFG.worker) loadWatchlistWorkerFolders();
+    }
+
+    const WL_NOISE = new Set(['.svn','pristine','__pycache__','venv','.venv','.git','node_modules','.idea','.vscode']);
+
+    function isWlNoiseFolder(path) {
+        return String(path || '').split('/').some(p => WL_NOISE.has(String(p).toLowerCase()));
+    }
+
+    function wlFolderSectionTitle(label, count) {
+        return `<div style="display:flex; align-items:center; gap:0.45rem; padding:0.2rem 0.35rem 0.45rem; margin-top:0.35rem;">
+            <span class="rpt-muted" style="font-size:0.68rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">${escapeHtml(label)}</span>
+            <span class="rpt-muted" style="font-size:0.68rem;">${count}</span>
+        </div>`;
+    }
+
+    function wlFolderRowHtml(f, depth, opts) {
+        opts = opts || {};
+        const path = f.path || '';
+        const name = f.name || path.split('/').pop() || path || 'Worker root';
+        const pad = Math.max(0, depth) * 14;
+        const hideExpand = !!opts.hideExpand;
+        const meta = opts.meta || '';
+        const expandBtn = hideExpand
+            ? `<span style="width:22px; flex-shrink:0;"></span>`
+            : `<button type="button" class="wl-expand-btn" data-path="${escapeHtml(path)}" data-loaded="0"
+                            onclick="event.stopPropagation(); toggleWatchlistFolderExpand(this);"
+                            style="background:none;border:none;cursor:pointer;width:22px;padding:0;font-size:0.75rem;" title="Expand">▶</button>`;
+        const accent = opts.scheduler ? '#fbbf24' : '#60A5FA';
+        return `
+            <li class="wl-folder-item" data-path="${escapeHtml(path)}" style="list-style:none; margin:0;">
+                <div style="display:flex; align-items:center; gap:0.35rem; padding:0.35rem 0.4rem; padding-left:${8 + pad}px; border-radius:4px; cursor:pointer;"
+                     onclick="selectWatchlistFolder(this.parentElement)">
+                    ${expandBtn}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="${accent}" style="flex-shrink:0;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span class="wl-folder-name" style="font-family: monospace; font-size:0.85rem;">${escapeHtml(name)}</span>
+                    ${meta ? `<span class="rpt-muted" style="font-size:0.68rem; white-space:nowrap;">${escapeHtml(meta)}</span>` : ''}
+                    <span class="rpt-muted" style="font-size:0.72rem; margin-left:auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(path)}">${escapeHtml(path || '(root)')}</span>
+                </div>
+                <ul class="wl-folder-children" style="display:none; list-style:none; padding:0; margin:0;"></ul>
+            </li>`;
+    }
+
+    async function fetchWorkerFolders(worker, basePath, search) {
+        const params = new URLSearchParams({ worker_name: worker, type: 'folder' });
+        if (search) {
+            params.set('search', search);
+        } else if (basePath) {
+            params.set('base_path', basePath);
+        }
+        const res = await fetch(`/files/list?${params.toString()}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        return (data.files || []).filter(f => f.type === 'folder' && !isWlNoiseFolder(f.path));
+    }
+
+    async function fetchSchedulerScriptFolders(worker, search) {
+        const params = new URLSearchParams({ worker_name: worker });
+        if (search) params.set('search', search);
+        const url = (REPORTS_CFG.schedulerFoldersUrl || '/api/watchlist/scheduler-folders') + '?' + params.toString();
+        const res = await fetch(url, { cache: 'no-store' });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        return (data.folders || []).filter(f => !isWlNoiseFolder(f.path || ''));
+    }
+
+    function wlSchedulerMeta(f) {
+        const n = Number(f.script_count || 0);
+        const s = Number(f.scheduled_count || 0);
+        if (s > 0) return s + ' scheduled';
+        if (n > 0) return n + ' script' + (n === 1 ? '' : 's');
+        return '';
+    }
+
+    function renderWatchlistFolderPicker(schedulerFolders, workerFolders, searchMode) {
+        const hasSch = schedulerFolders && schedulerFolders.length;
+        const hasNorm = workerFolders && workerFolders.length;
+        if (!hasSch && !hasNorm) {
+            return '<div class="rpt-muted" style="text-align: center;">' +
+                (searchMode ? 'No folders match that search.' : 'No folders found on this worker.') +
+                '</div>';
+        }
+        let html = '';
+        html += wlFolderSectionTitle('Scheduler folders', hasSch ? schedulerFolders.length : 0);
+        if (hasSch) {
+            html += '<ul style="list-style:none;padding:0;margin:0 0 0.75rem;">';
+            schedulerFolders.forEach(f => {
+                const display = searchMode ? (f.path || f.name || '(root)') : (f.name || f.path || '(root)');
+                html += wlFolderRowHtml({ ...f, name: display }, 0, {
+                    scheduler: true,
+                    hideExpand: true,
+                    meta: wlSchedulerMeta(f),
+                });
+            });
+            html += '</ul>';
+        } else {
+            html += '<div class="rpt-muted" style="padding:0.35rem 0.5rem 0.75rem; font-size:0.8rem;">No scheduler script folders yet.</div>';
+        }
+        html += wlFolderSectionTitle('Worker folders', hasNorm ? workerFolders.length : 0);
+        if (hasNorm) {
+            html += '<ul style="list-style:none;padding:0;margin:0;">';
+            workerFolders.forEach(f => {
+                const depth = searchMode ? Math.min(((f.path || '').split('/').filter(Boolean).length - 1), 6) : 0;
+                const name = searchMode ? (f.path || f.name) : f.name;
+                html += wlFolderRowHtml({ ...f, name: name }, Math.max(depth, 0));
+            });
+            html += '</ul>';
+        } else {
+            html += '<div class="rpt-muted" style="padding:0.35rem 0.5rem; font-size:0.8rem;">No worker folders found.</div>';
+        }
+        return html;
+    }
+
+    async function loadWatchlistWorkerFolders() {
+        const worker = document.getElementById('wlWorkerSelect').value;
+        const container = document.getElementById('wlFolderContainer');
+        if (!worker) {
+            container.innerHTML = '<div class="rpt-muted" style="text-align: center;">Select a worker to view folders.</div>';
+            return;
+        }
+        container.innerHTML = '<div class="rpt-muted" style="text-align: center;">Loading folders...</div>';
+        try {
+            const [schedulerFolders, folders] = await Promise.all([
+                fetchSchedulerScriptFolders(worker, ''),
+                fetchWorkerFolders(worker, '', ''),
+            ]);
+            container.innerHTML = renderWatchlistFolderPicker(schedulerFolders, folders, false);
+        } catch (e) {
+            container.innerHTML = `<div style="text-align: center; color: #f87171;">${escapeHtml(String(e.message || e))}</div>`;
+        }
+    }
+
+    async function onWatchlistFolderSearchKey(ev) {
+        if (ev.key !== 'Enter' && ev.type !== 'change') {
+            // debounce-ish: only search on Enter or when cleared
+            if (ev.target.value) return;
+        }
+        const worker = document.getElementById('wlWorkerSelect').value;
+        const q = (document.getElementById('wlFolderSearch').value || '').trim();
+        const container = document.getElementById('wlFolderContainer');
+        if (!worker) return;
+        if (!q) {
+            loadWatchlistWorkerFolders();
+            return;
+        }
+        container.innerHTML = '<div class="rpt-muted" style="text-align: center;">Searching…</div>';
+        try {
+            const [schedulerFolders, foldersRaw] = await Promise.all([
+                fetchSchedulerScriptFolders(worker, q),
+                fetchWorkerFolders(worker, '', q),
+            ]);
+            const folders = foldersRaw.slice(0, 300);
+            let html = renderWatchlistFolderPicker(schedulerFolders, folders, true);
+            if (folders.length >= 300) {
+                html += '<div class="rpt-muted" style="text-align:center;font-size:0.8rem;margin-top:0.5rem;">Showing first 300 worker matches — refine search.</div>';
+            }
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = `<div style="text-align: center; color: #f87171;">${escapeHtml(String(e.message || e))}</div>`;
+        }
+    }
+
+    function filterWatchlistFolders() {
+        // Kept for compatibility; search runs on Enter via onWatchlistFolderSearchKey
+        const input = document.getElementById('wlFolderSearch');
+        if (input && !input.value.trim()) loadWatchlistWorkerFolders();
+    }
+
+    async function toggleWatchlistFolderExpand(btn) {
+        const path = btn.getAttribute('data-path') || '';
+        const li = btn.closest('.wl-folder-item');
+        const childUl = li && li.querySelector(':scope > .wl-folder-children');
+        if (!childUl) return;
+        const open = childUl.style.display !== 'none';
+        if (open) {
+            childUl.style.display = 'none';
+            btn.textContent = '▶';
+            return;
+        }
+        if (btn.getAttribute('data-loaded') !== '1') {
+            btn.textContent = '…';
+            const worker = document.getElementById('wlWorkerSelect').value;
+            try {
+                const folders = await fetchWorkerFolders(worker, path, '');
+                const depth = (path.split('/').filter(Boolean).length);
+                childUl.innerHTML = folders.length
+                    ? folders.map(f => wlFolderRowHtml(f, depth)).join('')
+                    : '<li class="rpt-muted" style="padding:0.35rem 0.5rem; font-size:0.8rem; list-style:none;">No subfolders</li>';
+                btn.setAttribute('data-loaded', '1');
+            } catch (e) {
+                childUl.innerHTML = `<li style="color:#f87171;list-style:none;padding:0.35rem;">${escapeHtml(String(e.message || e))}</li>`;
+            }
+        }
+        childUl.style.display = 'block';
+        btn.textContent = '▼';
+    }
+
+    function selectWatchlistFolder(element) {
+        const path = (element && element.getAttribute('data-path')) || '';
+        document.querySelectorAll('.wl-folder-item > div').forEach(el => el.style.background = 'transparent');
+        const row = element && element.querySelector(':scope > div');
+        if (row) row.style.background = 'rgba(96, 165, 250, 0.2)';
+        document.getElementById('wlSelectedFolder').value = path;
+        const label = document.getElementById('wlSelectedLabel');
+        if (label) label.innerHTML = `Selected: <span class="rpt-strong" style="font-family:monospace;">${escapeHtml(path)}</span>`;
+    }
+
+    async function submitWatchlistFolder() {
+        const path = document.getElementById('wlSelectedFolder').value;
+        const worker = document.getElementById('wlWorkerSelect').value;
+        if (!worker) {
+            alert("Please select a worker first.");
+            return;
+        }
+        if (!path) {
+            alert("Please select a folder first.");
+            return;
+        }
+
+        try {
+            const res = await fetch(REPORTS_CFG.toggleUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_path: path, worker_name: worker })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                document.getElementById('addFolderWatchlistModal').style.display = 'none';
+                loadWatchlist();
+            } else {
+                alert("Error toggling watchlist: " + (data.error || "Unknown"));
+            }
+        } catch(e) {
+            alert("Error: " + e);
+        }
+    }
+
+    // Tab Switching Logic
+    function applyReportsChrome(tabId) {
+        const filterForm = document.getElementById('reportsFiltersForm');
+        const tabsContainer = document.querySelector('.tabs-container');
+        const pageTitle = document.querySelector('.topbar-title');
+        const mode = (tabId === 'schedule-tracking') ? 'schedule-tracking'
+            : (tabId === 'watchlist') ? 'watchlist'
+            : 'history';
+        document.documentElement.setAttribute('data-reports-tab', mode);
+
+        if (tabId === 'schedule-tracking') {
+            if (filterForm) filterForm.style.display = 'none';
+            if (tabsContainer) tabsContainer.style.display = 'none';
+            if (pageTitle) pageTitle.textContent = 'Schedule Tracking';
+        } else {
+            if (filterForm) filterForm.style.display = 'flex';
+            if (tabsContainer) tabsContainer.style.display = 'flex';
+            if (pageTitle) pageTitle.textContent = 'Reports & Analytics';
+        }
+    }
+
+    function applyReportsHashTab(fromLoad) {
+        const hash = (window.location.hash || '').toLowerCase();
+        let tabId = 'history';
+        let btn = document.querySelector('.tabs-container .tab-btn:nth-child(1)');
+        if (hash === '#watchlist') {
+            tabId = 'watchlist';
+            btn = document.querySelector('.tabs-container .tab-btn:nth-child(3)');
+        } else if (hash === '#schedule-tracking') {
+            if (REPORTS_CFG.isAdmin && document.getElementById('tab-schedule-tracking')) {
+                tabId = 'schedule-tracking';
+                btn = null;
+            } else {
+                tabId = 'history';
+                if (location.hash !== '#history') {
+                    history.replaceState(null, null, '#history');
+                }
+            }
+        } else if (hash === '#analytics') {
+            // Legacy alias → Execution History
+            tabId = 'history';
+        }
+        switchTab(tabId, btn, { fromLoad: !!fromLoad });
+    }
+
+    function switchTab(tabId, btnElement, opts) {
+        opts = opts || {};
+        // Non-admins cannot open schedule tracking
+        if (tabId === 'schedule-tracking' && !(REPORTS_CFG && REPORTS_CFG.isAdmin)) {
+            tabId = 'history';
+            btnElement = document.querySelector('.tabs-container .tab-btn:nth-child(1)');
+        }
+        const panel = document.getElementById('tab-' + tabId);
+        if (!panel) return;
+
+        const alreadyActive = panel.classList.contains('active');
+        // Update URL hash without scrolling
+        if (location.hash !== '#' + tabId) {
+            history.replaceState(null, null, '#' + tabId);
+        }
+
+        if (!alreadyActive) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            panel.classList.add('active');
+            if (btnElement) btnElement.classList.add('active');
+            else if (tabId === 'history') {
+                const histBtn = document.querySelector('.tabs-container .tab-btn:nth-child(1)');
+                if (histBtn) histBtn.classList.add('active');
+            } else if (tabId === 'analytics') {
+                const aBtn = document.querySelector('.tabs-container .tab-btn:nth-child(2)');
+                if (aBtn) aBtn.classList.add('active');
+            } else if (tabId === 'watchlist') {
+                const wBtn = document.querySelector('.tabs-container .tab-btn:nth-child(3)');
+                if (wBtn) wBtn.classList.add('active');
+            }
+        } else if (btnElement) {
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            btnElement.classList.add('active');
+        }
+
+        applyReportsChrome(tabId);
+
+        if (tabId === 'schedule-tracking' && typeof loadScheduleTracking === 'function') {
+            // On first paint path, defer fetch slightly so layout is stable first
+            if (opts.fromLoad) {
+                requestAnimationFrame(function () { loadScheduleTracking(); });
+            } else {
+                loadScheduleTracking();
+            }
+        } else if (tabId === 'watchlist' && typeof loadWatchlist === 'function') {
+            if (opts.fromLoad) {
+                requestAnimationFrame(function () { loadWatchlist(); });
+            } else {
+                loadWatchlist();
+            }
+        }
+    }
+
+    function syncReportsDateRangeHidden(selectedDates, instance) {
+        const fromInput = document.getElementById('dateFromInput');
+        const toInput = document.getElementById('dateToInput');
+        if (!fromInput || !toInput) return;
+        if (!selectedDates || !selectedDates.length) {
+            fromInput.value = '';
+            toInput.value = '';
+            return;
+        }
+        const fmt = (d) => instance.formatDate(d, 'Y-m-d');
+        let start = selectedDates[0];
+        let end = selectedDates.length > 1 ? selectedDates[1] : selectedDates[0];
+        // Keep range logically correct: start <= end
+        if (start && end && start.getTime() > end.getTime()) {
+            const tmp = start;
+            start = end;
+            end = tmp;
+            if (instance && typeof instance.setDate === 'function') {
+                instance.setDate([start, end], false);
+            }
+        }
+        fromInput.value = start ? fmt(start) : '';
+        toInput.value = end ? fmt(end) : '';
+    }
+
+    function changeReportsPageSize(size) {
+        const allowed = [10, 25, 50, 100];
+        const next = allowed.includes(parseInt(size, 10)) ? parseInt(size, 10) : 10;
+        const url = new URL(window.location.href);
+        url.searchParams.set('limit', next);
+        url.searchParams.set('page', '1');
+        const limitField = document.getElementById('reportsLimitField');
+        if (limitField) limitField.value = next;
+        loadReportsHistoryPage(url.pathname + '?' + url.searchParams.toString() + '#history');
+    }
+
+    async function loadReportsHistoryPage(href) {
+        const card = document.getElementById('reportsHistoryCard');
+        if (!card) {
+            window.location = href;
+            return;
+        }
+        let url;
+        try {
+            url = new URL(href, window.location.origin);
+        } catch (e) {
+            window.location = href;
+            return;
+        }
+        if (!url.hash) url.hash = '#history';
+        const displayUrl = url;
+
+        const scrollY = window.scrollY;
+        card.classList.add('is-paging');
+        try {
+            const res = await fetch(url.pathname + '?' + url.searchParams.toString(), {
+                headers: { 'Accept': 'text/html' },
+                cache: 'no-store',
+                credentials: 'same-origin',
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const html = await res.text();
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            const next = tmp.querySelector('#reportsHistoryCard');
+            if (!next) throw new Error('History table not found in response');
+            card.replaceWith(next);
+            history.pushState({ reportsHistory: true }, '', displayUrl.pathname + displayUrl.search + displayUrl.hash);
+            document.documentElement.setAttribute('data-reports-tab', 'history');
+            window.scrollTo(0, scrollY);
+        } catch (e) {
+            console.error(e);
+            window.location = displayUrl.pathname + displayUrl.search + displayUrl.hash;
+        }
+    }
+
+    function bindReportsHistoryPagination() {
+        const root = document.getElementById('tab-history') || document;
+        root.addEventListener('submit', function (ev) {
+            const form = ev.target && ev.target.closest ? ev.target.closest('form.js-report-rerun') : null;
+            if (!form) return;
+            const sid = (form.querySelector('input[name="script_id"]') || {}).value || '';
+            if (!confirm('Re-run this script now? A new job will be queued.' + (sid ? ' (script #' + sid + ')' : ''))) {
+                ev.preventDefault();
+            }
+        });
+        root.addEventListener('click', function (ev) {
+            const btn = ev.target && ev.target.closest ? ev.target.closest('.js-show-error-details') : null;
+            if (btn) {
+                ev.preventDefault();
+                showErrorDetails(btn);
+                return;
+            }
+            const a = ev.target && ev.target.closest ? ev.target.closest('#reportsHistoryCard a.pagination-btn') : null;
+            if (!a) return;
+            if (a.classList.contains('disabled')) {
+                ev.preventDefault();
+                return;
+            }
+            const href = a.getAttribute('href');
+            if (!href || href === '#') {
+                ev.preventDefault();
+                return;
+            }
+            ev.preventDefault();
+            loadReportsHistoryPage(href);
+        });
+    }
+
+    window.addEventListener('popstate', function () {
+        if (window.location.pathname.indexOf('/reports') === -1) return;
+        const hash = (window.location.hash || '').toLowerCase();
+        if (hash === '#watchlist' || hash === '#schedule-tracking') {
+            if (typeof applyReportsHashTab === 'function') applyReportsHashTab(false);
+            return;
+        }
+        // Soft-reload history table for back/forward on page changes
+        if (document.getElementById('reportsHistoryCard')) {
+            loadReportsHistoryPage(window.location.pathname + window.location.search + '#history');
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        bindReportsHistoryPagination();
+    });
+
+    window._wlPage = 1;
+    window._wlPageSize = 10;
+
+    function renderWatchlistPagination(totalFiltered) {
+        const bar = document.getElementById('watchlistPagination');
+        const info = document.getElementById('wlPageInfo');
+        const controls = document.getElementById('wlPageControls');
+        if (!bar || !info || !controls) return;
+
+        const totalPages = Math.max(1, Math.ceil(totalFiltered / window._wlPageSize));
+        if (window._wlPage > totalPages) window._wlPage = totalPages;
+        if (totalFiltered <= window._wlPageSize) {
+            bar.style.display = totalFiltered ? 'flex' : 'none';
+            if (totalFiltered) {
+                info.textContent = `Showing ${totalFiltered} of ${totalFiltered}`;
+                controls.innerHTML = '';
+            }
+            return;
+        }
+
+        bar.style.display = 'flex';
+        const start = (window._wlPage - 1) * window._wlPageSize + 1;
+        const end = Math.min(window._wlPage * window._wlPageSize, totalFiltered);
+        info.textContent = `Showing ${start}–${end} of ${totalFiltered}`;
+
+        let html = '';
+        html += `<button type="button" class="pagination-btn ${window._wlPage <= 1 ? 'disabled' : ''}" onclick="goToWatchlistPage(${window._wlPage - 1})">‹</button>`;
+        const windowSize = 2;
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= window._wlPage - windowSize && p <= window._wlPage + windowSize)) {
+                html += `<button type="button" class="pagination-btn ${p === window._wlPage ? 'active' : ''}" onclick="goToWatchlistPage(${p})">${p}</button>`;
+            } else if (p === window._wlPage - windowSize - 1 || p === window._wlPage + windowSize + 1) {
+                html += `<span class="pagination-dots">…</span>`;
+            }
+        }
+        html += `<button type="button" class="pagination-btn ${window._wlPage >= totalPages ? 'disabled' : ''}" onclick="goToWatchlistPage(${window._wlPage + 1})">›</button>`;
+        controls.innerHTML = html;
+    }
+
+    function goToWatchlistPage(p) {
+        if (p < 1) return;
+        window._wlPage = p;
+        filterWatchlistUI(false);
+    }
+
+    function escapeHtml(unsafe) {
+        return (unsafe || '').toString()
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+
+    async function toggleWatchlist(filepath, btn, isFromWatchlistTab=false, workerName='') {
+        try {
+            const worker = workerName || (btn && btn.getAttribute('data-worker')) || REPORTS_CFG.worker || '';
+            const res = await fetch(REPORTS_CFG.toggleUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_path: filepath, worker_name: worker })
+            });
+            const data = await res.json();
+            
+            if (data.status === 'ok') {
+                if (isFromWatchlistTab) {
+                    loadWatchlist();
+                } else {
+                    if (data.watchlisted) {
+                        btn.querySelector('svg').setAttribute('fill', '#fbbf24');
+                        btn.querySelector('svg').setAttribute('stroke', '#fbbf24');
+                    } else {
+                        btn.querySelector('svg').setAttribute('fill', 'none');
+                        btn.querySelector('svg').setAttribute('stroke', '#71717a');
+                    }
+                }
+            } else {
+                alert("Error toggling watchlist: " + (data.error || "Unknown"));
+            }
+        } catch(e) {
+            console.error(e);
+            alert("Network error.");
+        }
+    }
+
+    function toggleTraceback(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const open = el.style.display !== 'none';
+        el.style.display = open ? 'none' : 'table-row';
+        const btn = document.querySelector(`[data-tb-target="${id}"]`);
+        if (btn) btn.textContent = open ? '▸' : '▾';
+    }
+
+    function errorExpandPayload(err) {
+        if (!err || typeof err !== 'object') return String(err || 'No additional detail available.');
+        const chunks = [];
+        const title = err.error_title || err.error_type || '';
+        const msg = err.error_message || err.message || err.detail || '';
+        const tb = err.traceback || err.stack_trace || err.stack || err.exception || '';
+        if (title && msg && !String(msg).startsWith(String(title))) {
+            chunks.push(String(title));
+        }
+        if (msg) chunks.push(String(msg));
+        if (tb && String(tb).trim() && String(tb).trim() !== String(msg).trim()) {
+            chunks.push(String(tb));
+        }
+        if (!chunks.length && title) chunks.push(String(title));
+        if (err.source_file || err.line_number) {
+            chunks.push(`Location: ${err.source_file || '—'} : ${err.line_number || '—'}`);
+        }
+        return chunks.join('\n\n').trim() || 'No additional detail available for this error.';
+    }
+
+    function showErrorDetails(btn) {
+        const modal = document.getElementById('errorModal');
+        const body = document.getElementById('errorModalBody');
+        try {
+            if (!modal || !body) {
+                console.error('errorModal missing from DOM');
+                return;
+            }
+            body.innerHTML = '';
+            modal.style.display = 'flex';
+
+            let details = null;
+            const reportId = btn && btn.getAttribute ? btn.getAttribute('data-report-id') : null;
+            const jsonEl = reportId ? document.getElementById('report-err-' + reportId) : null;
+            if (jsonEl) {
+                try {
+                    const raw = (jsonEl.tagName === 'TEMPLATE'
+                        ? (jsonEl.content && jsonEl.content.textContent) || jsonEl.innerHTML
+                        : jsonEl.textContent) || '';
+                    details = JSON.parse(raw.trim() || 'null');
+                } catch (parseErr) {
+                    body.innerHTML = `<div style="color:#f87171;padding:1rem;">Failed to parse error details.<br><pre class="rpt-pre">${escapeHtml(String(parseErr))}</pre></div>`;
+                    return;
+                }
+            } else {
+                // Legacy fallback: base64 data attribute
+                const b64 = btn && btn.getAttribute ? btn.getAttribute('data-error-details') : null;
+                if (!b64) {
+                    body.innerHTML = `<div class="rpt-muted" style="padding: 2rem; text-align: center;">No structured error details available.</div>`;
+                    return;
+                }
+                let detailsStr = '';
+                try {
+                    detailsStr = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+                    details = JSON.parse(detailsStr);
+                } catch (e) {
+                    if (detailsStr) {
+                        body.innerHTML = `<div style="margin-bottom: 1rem;">
+                            <span class="badge error" style="margin-bottom: 0.5rem;">Raw Output</span>
+                            <pre class="rpt-pre">${escapeHtml(detailsStr)}</pre>
+                        </div>`;
+                        return;
+                    }
+                    body.innerHTML = `<div style="color: #f87171;">Failed to decode details.<br><pre>${escapeHtml(b64)}</pre></div>`;
+                    return;
+                }
+            }
+
+            if (!details || (typeof details === 'object' && !Object.keys(details).length)) {
+                body.innerHTML = `<div class="rpt-muted" style="padding: 2rem; text-align: center;">No structured error details available.</div>`;
+                return;
+            }
+            
+            let html = '';
+            let rowSeq = 0;
+            const reportStatus = (btn.getAttribute('data-report-status') || '').toLowerCase();
+            
+            // Modern errors array
+            if (details.errors && details.errors.length > 0) {
+                // Group by error category
+                const groupedErrors = {};
+                details.errors.forEach(err => {
+                    const type = (err && (err.error_type || err.error_title)) || 'Unknown Error';
+                    if (!groupedErrors[type]) groupedErrors[type] = [];
+                    groupedErrors[type].push(err || {});
+                });
+
+                Object.keys(groupedErrors).forEach(category => {
+                    const categoryErrors = groupedErrors[category];
+                    const catLow = category.toLowerCase();
+                    const isInterrupt = catLow.includes('interrupted') || catLow.includes('stopped') || reportStatus === 'stopped';
+                    const isWarn = catLow.includes('warning') || isInterrupt;
+                    const badgeClass = isWarn ? 'warning' : 'error';
+                    const sectionLabel = isInterrupt ? 'Stop reason' : 'Error Message';
+                    
+                    html += `<div style="margin-bottom: 1.5rem;">
+                        <h4 class="rpt-heading" style="margin: 0 0 1rem 0; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="badge ${badgeClass}">${escapeHtml(category)}</span>
+                            <span class="rpt-muted" style="font-size: 0.9rem;">(${categoryErrors.length} occurrences)</span>
+                        </h4>
+                        <table class="glass-table" style="margin-bottom: 1rem;">
+                            <thead>
+                                <tr>
+                                    <th style="width:28px;"></th>
+                                    <th>${sectionLabel}</th>
+                                    <th>File</th>
+                                    <th>Line</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    
+                    categoryErrors.forEach((err) => {
+                        rowSeq += 1;
+                        const tbId = `tb_err_${rowSeq}`;
+                        let srcFile = err.source_file ? String(err.source_file).split(/[/\\]/).pop() : '—';
+                        let lineNo = err.line_number || '—';
+                        const detailText = errorExpandPayload(err);
+
+                        // Retroactive fix for older reports already in DB: 
+                        // If the source is a common library file, parse the traceback to find the real user file
+                        const tbForParse = err.traceback || err.stack_trace || '';
+                        if (tbForParse && ['errorhandler.py', 'app.py', 'webdriver.py', 'connectionpool.py', 'socket.py'].includes(srcFile.toLowerCase())) {
+                            const tbMatches = [...String(tbForParse).matchAll(/File "([^"]+)", line (\d+)/g)];
+                            if (tbMatches.length > 0) {
+                                for (let i = tbMatches.length - 1; i >= 0; i--) {
+                                    const mPath = tbMatches[i][1].toLowerCase();
+                                    if (!mPath.includes("site-packages") && !mPath.includes("\\lib\\") && !mPath.includes("/lib/")) {
+                                        const candidate = tbMatches[i][1].split(/[/\\]/).pop().toLowerCase();
+                                        if (!['errorhandler.py', 'app.py', 'webdriver.py', 'connectionpool.py', 'socket.py'].includes(candidate)) {
+                                            srcFile = tbMatches[i][1].split(/[/\\]/).pop();
+                                            lineNo = tbMatches[i][2];
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const shortMsg = err.error_message || err.message || '';
+                        html += `<tr style="cursor: pointer;" onclick="toggleTraceback('${tbId}')" title="Click to expand / collapse details">
+                            <td class="rpt-muted" style="font-size:0.85rem;"><span data-tb-target="${tbId}">▸</span></td>
+                            <td class="rpt-heading" style="max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <strong style="display:block;">${escapeHtml(err.error_title || err.error_type || 'Error')}</strong>
+                                <span class="rpt-muted" style="font-size: 0.8rem;">${escapeHtml(shortMsg)}</span>
+                            </td>
+                            <td style="font-family: monospace;">${escapeHtml(String(srcFile))}</td>
+                            <td>${escapeHtml(String(lineNo))}</td>
+                        </tr>`;
+
+                        // Always render expand row — many scraper errors have message but empty traceback
+                        html += `<tr id="${tbId}" style="display: none;">
+                            <td colspan="4" style="padding: 0; border: none;">
+                                <div class="rpt-sunken" style="padding: 1rem;">
+                                    <pre class="rpt-pre" style="padding: 0; background: transparent; border: none;">${escapeHtml(detailText)}</pre>
+                                </div>
+                            </td>
+                        </tr>`;
+                    });
+                    
+                    html += `</tbody></table></div>`;
+                });
+            } else if (details.error_type || details.error_title || details.traceback || details.error || details.error_message) {
+                // Legacy schema
+                const isWarn = (details.error_type || '').toLowerCase().includes('warning');
+                html += `<div style="margin-bottom: 1.5rem;">
+                    <span class="badge ${isWarn ? 'warning' : 'error'}" style="margin-bottom: 0.5rem;">${escapeHtml(details.error_type || details.error_title || 'Error')}</span>
+                    <h4 class="rpt-heading" style="margin: 0 0 1rem 0; font-size: 1.1rem;">${escapeHtml(details.error_title || 'Execution Failed')}</h4>`;
+                    
+                if (details.error_message) {
+                    html += `<p class="rpt-strong" style="margin-bottom: 1rem;">${escapeHtml(details.error_message)}</p>`;
+                }
+                const traceText = details.traceback || details.error || details.error_message || '';
+                if (traceText) {
+                    html += `<pre class="rpt-pre">${escapeHtml(traceText)}</pre>`;
+                }
+                html += `</div>`;
+            }
+            
+            // Failed Files list
+            if (details.failed_files && details.failed_files.length > 0) {
+                html += `<div style="margin-top: 1.5rem;">
+                    <h4 class="rpt-heading" style="margin: 0 0 0.8rem 0; display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                        Failed Files
+                    </h4>
+                    <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 1rem;">`;
+                details.failed_files.forEach(f => {
+                    const name = typeof f === 'string' ? f : (f.path || f.file || f);
+                    html += `<div style="color: #f87171; font-family: monospace; font-size: 0.85rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(239, 68, 68, 0.1);">${escapeHtml(name)}</div>`;
+                });
+                html += `</div></div>`;
+            }
+            
+            if (!html) {
+                html = `<pre class="rpt-pre">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`;
+            }
+            
+            body.innerHTML = html;
+        } catch(e) {
+            console.error(e);
+            if (body) {
+                body.innerHTML = `<div style="color:#f87171;padding:1.25rem;">Could not open error details.<br><span class="rpt-muted">${escapeHtml(String(e && e.message ? e.message : e))}</span></div>`;
+            }
+            if (modal) modal.style.display = 'flex';
+        }
+    }
+    function openAllFoldersModal() {
+        document.getElementById('allFoldersModal').style.display = 'flex';
+    }
+    function openAllErrorsModal() {
+        document.getElementById('allErrorsModal').style.display = 'flex';
+    }
+    function openAllScriptsModal() {
+        document.getElementById('allScriptsModal').style.display = 'flex';
+    }
+
+    async function loadWatchlist() {
+        const container = document.getElementById('watchlist-container');
+        if (!container) return;
+
+        container.innerHTML = `<div class="empty-hint">Loading watchlist…</div>`;
+
+        const params = new URLSearchParams();
+        if (REPORTS_CFG.worker) params.set('worker', REPORTS_CFG.worker);
+        if (REPORTS_CFG.dateFrom) params.set('date_from', REPORTS_CFG.dateFrom);
+        if (REPORTS_CFG.dateTo) params.set('date_to', REPORTS_CFG.dateTo);
+
+        try {
+            const res = await fetch(REPORTS_CFG.watchlistUrl + '?' + params.toString(), { cache: 'no-store' });
+            const data = await res.json();
+
+            if (data.status !== 'ok') {
+                container.innerHTML = `<div class="empty-hint" style="color:#f87171;">Error: ${escapeHtml(data.error || 'Unknown')}</div>`;
+                return;
+            }
+
+            window._watchlistItems = data.items || [];
+            const counts = data.counts || {
+                total: window._watchlistItems.length,
+                failing: window._watchlistItems.filter(i => i.status === 'failing').length,
+                healthy: 0
+            };
+            counts.healthy = counts.total - counts.failing;
+            const countsEl = document.getElementById('wlCounts');
+            if (countsEl) {
+                countsEl.innerHTML = `
+                    <span class="wl-chip">Total ${counts.total}</span>
+                    <span class="wl-chip bad">Failing ${counts.failing}</span>
+                    <span class="wl-chip ok">Healthy ${counts.healthy}</span>
+                `;
+            }
+            filterWatchlistUI();
+        } catch (e) {
+            container.innerHTML = `<div class="empty-hint" style="color:#f87171;">Failed to load watchlist: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
+    function filterWatchlistUI(resetPage = true) {
+        const container = document.getElementById('watchlist-container');
+        if (!container) return;
+        const items = window._watchlistItems || [];
+        const q = ((document.getElementById('wlSearchInput') || {}).value || '').toLowerCase().trim();
+        const status = ((document.getElementById('wlStatusFilter') || {}).value) || 'all';
+
+        if (resetPage) window._wlPage = 1;
+
+        const filtered = items.filter(item => {
+            if (status !== 'all' && item.status !== status) return false;
+            const hay = `${item.worker_name || ''} ${item.file_path || ''}`.toLowerCase();
+            if (q && !hay.includes(q)) return false;
+            return true;
+        });
+
+        if (!items.length) {
+            container.innerHTML = `
+                <div class="empty-hint">
+                    Your watchlist is empty.<br>
+                    <span style="font-size:0.8rem;opacity:0.75;">Use Add folder — pick a worker, expand nested folders, then Track.</span>
+                </div>`;
+            const bar = document.getElementById('watchlistPagination');
+            if (bar) bar.style.display = 'none';
+            return;
+        }
+        if (!filtered.length) {
+            container.innerHTML = `<div class="empty-hint">No items match this filter.</div>`;
+            const bar = document.getElementById('watchlistPagination');
+            if (bar) bar.style.display = 'none';
+            return;
+        }
+
+        const startIdx = (window._wlPage - 1) * window._wlPageSize;
+        const pageItems = filtered.slice(startIdx, startIdx + window._wlPageSize);
+        renderWatchlistPagination(filtered.length);
+
+        const reportsBase = REPORTS_CFG.reportsUrl;
+        container.innerHTML = pageItems.map(item => {
+            const isFailing = item.status === 'failing';
+            const icon = item.type === 'folder'
+                ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`
+                : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+            const badge = isFailing
+                ? `<span class="badge error" style="font-size:0.7rem;">Failing</span>`
+                : `<span class="badge success" style="font-size:0.7rem;">Healthy</span>`;
+            const workerBadge = item.worker_name
+                ? `<span class="wl-chip" style="font-size:0.68rem;">${escapeHtml(item.worker_name)}</span>`
+                : `<span class="wl-chip" style="font-size:0.68rem;opacity:0.6;">no worker</span>`;
+            let meta = '';
+            const matchHint = (item.match_count != null)
+                ? ` · ${item.match_count} matching run${item.match_count === 1 ? '' : 's'}`
+                : '';
+            if (isFailing && item.last_failed) {
+                meta = `<div class="wl-item-meta fail">Last failed ${escapeHtml(String(item.last_failed))} · ${escapeHtml(item.script_name || '—')}${matchHint}</div>`;
+            } else if (item.last_run) {
+                meta = `<div class="wl-item-meta">Last run ${escapeHtml(String(item.last_run))} · ${escapeHtml(item.last_status || '')}${matchHint}</div>`;
+            } else {
+                meta = `<div class="wl-item-meta">No matching runs in this date window${matchHint}</div>`;
+            }
+            const qs = new URLSearchParams();
+            if (item.worker_name) qs.set('job_worker', item.worker_name);
+            if (item.file_path) qs.set('folder_path', item.file_path);
+            const openHref = `${reportsBase}?${qs.toString()}#history`;
+            return `
+                <div class="watchlist-item" data-status="${escapeHtml(item.status || '')}" style="border-left:3px solid ${isFailing ? '#ef4444' : '#10b981'};">
+                    <div class="wl-item-main">
+                        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.2rem;">
+                            ${badge}
+                            ${workerBadge}
+                            <span style="color:var(--text-tertiary,#71717a);display:inline-flex;">${icon}</span>
+                            <span class="wl-item-path" title="${escapeHtml(item.file_path)}">${escapeHtml(item.file_path)}</span>
+                        </div>
+                        ${meta}
+                    </div>
+                    <div class="wl-item-side">
+                        <a class="wl-open-link" href="${openHref}" title="Show all runs for scripts under this folder">Reports</a>
+                        <button type="button"
+                                data-filepath="${escapeHtml(item.file_path)}"
+                                data-worker="${escapeHtml(item.worker_name || '')}"
+                                onclick="toggleWatchlist(this.getAttribute('data-filepath'), this, true, this.getAttribute('data-worker') || '')"
+                                style="background:none;border:none;cursor:pointer;padding:0.35rem;">
+                            <svg viewBox="0 0 24 24" fill="#fbbf24" stroke="#fbbf24" stroke-width="2" width="20" height="20">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    /* ===== Admin Schedule Tracking ===== */
+    let _stLoadedOnce = false;
+    let _stOpenFolders = new Set();
+    let _stUsersCache = [];
+    let _stSelectedUserId = null;
+    let _stChatKind = 'script';
+    let _stChatId = null;
+    let _stChatAction = 'bug';
+
+    function stFindScript(scheduleId) {
+        const uid = _stSelectedUserId;
+        const user = (_stUsersCache || []).find(u => String(u.user_id) === String(uid));
+        if (!user) return null;
+        const id = String(scheduleId);
+        const fromScripts = (user.scripts || []).find(s => String(s.id) === id);
+        if (fromScripts) return fromScripts;
+        for (const f of (user.folders || [])) {
+            const hit = (f.scripts || []).find(s => String(s.id) === id);
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    function stFindFolder(folderId) {
+        const uid = _stSelectedUserId;
+        const user = (_stUsersCache || []).find(u => String(u.user_id) === String(uid));
+        if (!user) return null;
+        return (user.folders || []).find(f => String(f.id) === String(folderId)) || null;
+    }
+
+    function stChatBtn(kind, id) {
+        return `<button type="button" class="st-chat-btn" title="Chat / action"
+            data-kind="${escapeHtml(kind)}" data-id="${escapeHtml(String(id || ''))}"
+            onclick="event.stopPropagation(); openStChatModal(this.getAttribute('data-id'), this.getAttribute('data-kind'))"
+            onmousedown="event.stopPropagation()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+        </button>`;
+    }
+
+    function openStChatModal(itemId, kind) {
+        const chatKind = (kind === 'folder') ? 'folder' : 'script';
+        const user = (_stUsersCache || []).find(u => String(u.user_id) === String(_stSelectedUserId));
+        const title = document.getElementById('stChatTitle');
+        const meta = document.getElementById('stChatMeta');
+        if (chatKind === 'folder') {
+            const f = stFindFolder(itemId);
+            if (!f) return;
+            _stChatKind = 'folder';
+            _stChatId = f.id;
+            if (title) title.textContent = 'Folder chat';
+            const workers = (f.workers || []).join(', ') || '—';
+            if (meta) {
+                meta.textContent = `${f.name || 'Folder'} · #${f.id} · ${f.script_count || 0} scripts · ${workers} · user ${user && user.username ? user.username : '—'}`;
+            }
+        } else {
+            const s = stFindScript(itemId);
+            if (!s) return;
+            _stChatKind = 'script';
+            _stChatId = s.id;
+            if (title) title.textContent = 'Script chat';
+            if (meta) {
+                meta.textContent = `${s.script_name || 'Script'} · #${s.id} · ${s.worker_name || '—'} · user ${user && user.username ? user.username : '—'}`;
+            }
+        }
+        _stChatAction = 'bug';
+        const msg = document.getElementById('stChatMessage');
+        if (msg) msg.value = '';
+        const err = document.getElementById('stChatError');
+        if (err) { err.style.display = 'none'; err.textContent = ''; }
+        document.querySelectorAll('#stChatActions .st-chat-action').forEach(btn => {
+            btn.classList.toggle('is-on', btn.getAttribute('data-action') === _stChatAction);
+        });
+        const modal = document.getElementById('stChatModal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeStChatModal() {
+        const modal = document.getElementById('stChatModal');
+        if (modal) modal.style.display = 'none';
+        _stChatId = null;
+        _stChatKind = 'script';
+    }
+
+    async function sendStChat() {
+        const err = document.getElementById('stChatError');
+        const showErr = (t) => {
+            if (!err) return;
+            err.textContent = t;
+            err.style.display = t ? 'block' : 'none';
+        };
+        if (!REPORTS_CFG.scheduleTrackingChatUrl || !_stChatId) return;
+        const message = (document.getElementById('stChatMessage') || {}).value || '';
+        const btn = document.getElementById('stChatSend');
+        if (btn) btn.disabled = true;
+        showErr('');
+        const body = {
+            kind: _stChatKind,
+            action: _stChatAction,
+            message,
+        };
+        if (_stChatKind === 'folder') body.folder_id = Number(_stChatId);
+        else body.schedule_id = Number(_stChatId);
+        try {
+            const res = await fetch(REPORTS_CFG.scheduleTrackingChatUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                showErr(data.error || 'Chat send failed');
+                return;
+            }
+            const next = data.tracking_status;
+            if (next) {
+                if (_stChatKind === 'folder') {
+                    const folder = stFindFolder(_stChatId);
+                    if (folder) folder.tracking_status = next;
+                    const sel = document.querySelector('.st-status-select[data-kind="folder"][data-id="' + String(_stChatId) + '"]');
+                    if (sel) {
+                        sel.value = next;
+                        sel.className = 'st-status-select st-badge-' + String(next).replace(/\s+/g, '_');
+                    }
+                } else {
+                    const row = stFindScript(_stChatId);
+                    if (row) row.tracking_status = next;
+                    const sel = document.querySelector('.st-status-select[data-kind="script"][data-id="' + String(_stChatId) + '"]');
+                    if (sel) {
+                        sel.value = next;
+                        sel.className = 'st-status-select st-badge-' + String(next).replace(/\s+/g, '_');
+                    }
+                }
+            }
+            closeStChatModal();
+        } catch (e) {
+            showErr(String(e.message || e));
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function stStatusLabel(s) {
+        const k = String(s || 'pending').toLowerCase();
+        if (k === 'in_progress') return 'In Progress';
+        return k.charAt(0).toUpperCase() + k.slice(1);
+    }
+
+    function stBadge(status) {
+        const k = String(status || 'pending').toLowerCase().replace(/\s+/g, '_');
+        return `<span class="st-badge st-badge-${escapeHtml(k)}">${escapeHtml(stStatusLabel(k))}</span>`;
+    }
+
+    function stStatusSelect(kind, id, status) {
+        const k = String(status || 'pending').toLowerCase().replace(/\s+/g, '_');
+        const opts = [
+            ['pending', 'Pending'],
+            ['in_progress', 'In Progress'],
+            ['completed', 'Completed'],
+            ['failed', 'Failed'],
+        ];
+        const options = opts.map(([val, label]) =>
+            `<option value="${val}" ${val === k ? 'selected' : ''}>${label}</option>`
+        ).join('');
+        return `<select class="st-status-select st-badge-${escapeHtml(k)}"
+            data-kind="${escapeHtml(kind)}" data-id="${escapeHtml(String(id))}"
+            title="Change status"
+            onclick="event.stopPropagation()"
+            onmousedown="event.stopPropagation()"
+            onchange="stChangeStatus(this)">
+            ${options}
+        </select>`;
+    }
+
+    function stScriptRows(scripts) {
+        if (!scripts || !scripts.length) {
+            return '<div class="empty-hint" style="padding:0.75rem;">No scripts.</div>';
+        }
+        return scripts.map(s => {
+            const enabled = s.enabled ? '' : ' · disabled';
+            return `<div class="st-script-row">
+                <div>
+                    <div class="st-script-name">${escapeHtml(s.script_name || 'Script')}</div>
+                    <div class="st-script-sub">#${escapeHtml(String(s.id || ''))} · ${escapeHtml(s.worker_name || '—')}${enabled}</div>
+                </div>
+                ${stStatusSelect('script', s.id, s.tracking_status)}
+                ${stChatBtn('script', s.id)}
+            </div>`;
+        }).join('');
+    }
+
+    function stFillSelect(sel, items, valueKey, labelKey) {
+        if (!sel) return;
+        const cur = sel.value;
+        const placeholder = (sel.options[0] && sel.options[0].textContent) || 'All';
+        sel.innerHTML = '';
+        const opt0 = document.createElement('option');
+        opt0.value = '';
+        opt0.textContent = placeholder;
+        sel.appendChild(opt0);
+        (items || []).forEach(it => {
+            const opt = document.createElement('option');
+            if (typeof it === 'string') {
+                opt.value = it;
+                opt.textContent = it;
+            } else {
+                opt.value = String(it[valueKey]);
+                opt.textContent = it[labelKey] || String(it[valueKey]);
+            }
+            if (cur && opt.value === cur) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    function stShowUsersView() {
+        _stSelectedUserId = null;
+        const usersView = document.getElementById('stUsersView');
+        const detailView = document.getElementById('stUserDetailView');
+        if (usersView) usersView.hidden = false;
+        if (detailView) detailView.hidden = true;
+        const title = document.getElementById('st-main-title');
+        if (title) title.textContent = 'Users';
+    }
+
+    function stOpenUser(userId) {
+        const uid = String(userId);
+        const user = (_stUsersCache || []).find(u => String(u.user_id) === uid);
+        if (!user) return;
+        _stSelectedUserId = uid;
+
+        const usersView = document.getElementById('stUsersView');
+        const detailView = document.getElementById('stUserDetailView');
+        const body = document.getElementById('stUserDetailBody');
+        const crumb = document.getElementById('stCrumbUser');
+        const title = document.getElementById('st-main-title');
+        if (usersView) usersView.hidden = true;
+        if (detailView) detailView.hidden = false;
+        if (crumb) crumb.textContent = user.username || ('User #' + uid);
+        if (title) title.textContent = user.username || 'User';
+
+        const folders = user.folders || [];
+        const scripts = user.scripts || [];
+        let html = '';
+
+        html += `<div class="st-subhead">
+            <div>
+                <h5>Scheduler Folders</h5>
+                <p>Expand a folder to see its member scripts. Status can be changed manually.</p>
+            </div>
+            <span class="st-group-meta">${folders.length} folder${folders.length === 1 ? '' : 's'}</span>
+        </div>`;
+        if (!folders.length) {
+            html += '<div class="empty-hint">No scheduler folders for this user.</div>';
+        } else {
+            html += folders.map(f => {
+                const open = _stOpenFolders.has(String(f.id));
+                const workers = (f.workers || []).join(', ') || '—';
+                return `<div class="st-group ${open ? 'is-open' : ''}" data-kind="folder" data-id="${escapeHtml(String(f.id))}">
+                    <div class="st-group-head" onclick="toggleStFolder(this)">
+                        <button type="button" class="st-chevron" aria-label="Expand">▶</button>
+                        <div>
+                            <div class="st-group-title">${escapeHtml(f.name || 'Folder')}</div>
+                            <div class="st-group-meta">${f.script_count || 0} scripts · ${escapeHtml(workers)}</div>
+                        </div>
+                        <div class="st-group-actions" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
+                            ${stStatusSelect('folder', f.id, f.tracking_status)}
+                            ${stChatBtn('folder', f.id)}
+                        </div>
+                    </div>
+                    <div class="st-children">${stScriptRows(f.scripts)}</div>
+                </div>`;
+            }).join('');
+        }
+
+        html += `<div class="st-subhead">
+            <div>
+                <h5>Individual Scripts</h5>
+                <p>Regular Scheduler scripts — shown directly (not folder members).</p>
+            </div>
+            <span class="st-group-meta">${scripts.length} script${scripts.length === 1 ? '' : 's'}</span>
+        </div>`;
+        if (!scripts.length) {
+            html += '<div class="empty-hint">No individual scheduler scripts for this user.</div>';
+        } else {
+            html += `<div class="st-scripts-flat">${stScriptRows(scripts)}</div>`;
+        }
+
+        if (body) body.innerHTML = html;
+    }
+
+    function renderUserList(users) {
+        const el = document.getElementById('stUsersView');
+        if (!el) return;
+        if (!users || !users.length) {
+            el.innerHTML = '<div class="empty-hint">No users match these filters.</div>';
+            return;
+        }
+        el.innerHTML = users.map(u => {
+            const workers = (u.workers || []).join(', ') || '—';
+            const folders = u.folder_count || 0;
+            const scripts = u.script_count || 0;
+            return `<button type="button" class="st-user-card" data-user-id="${escapeHtml(String(u.user_id))}" onclick="stOpenUser(this.getAttribute('data-user-id'))">
+                <div>
+                    <div class="st-group-title">${escapeHtml(u.username || 'User')}</div>
+                    <div class="st-group-meta">${folders} folder${folders === 1 ? '' : 's'} · ${scripts} individual script${scripts === 1 ? '' : 's'} · ${escapeHtml(workers)}</div>
+                </div>
+                ${stBadge(u.tracking_status)}
+                <span class="st-open-hint">Open →</span>
+            </button>`;
+        }).join('');
+    }
+
+    async function stChangeStatus(sel) {
+        if (!sel || !REPORTS_CFG.scheduleTrackingStatusUrl) return;
+        const kind = sel.getAttribute('data-kind') || '';
+        const id = sel.getAttribute('data-id') || '';
+        const status = sel.value || 'pending';
+        sel.disabled = true;
+        try {
+            const res = await fetch(REPORTS_CFG.scheduleTrackingStatusUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+                body: JSON.stringify({ kind, id: Number(id), status }),
+            });
+            const data = await res.json();
+            if (!res.ok || (data.status !== 'ok' && data.error)) {
+                alert(data.error || 'Could not update status');
+                return;
+            }
+            const next = data.tracking_status || status;
+            sel.value = next;
+            sel.className = 'st-status-select st-badge-' + String(next).replace(/\s+/g, '_');
+            const uid = _stSelectedUserId;
+            const user = (_stUsersCache || []).find(u => String(u.user_id) === String(uid));
+            if (user) {
+                if (kind === 'folder') {
+                    const folder = (user.folders || []).find(f => String(f.id) === String(id));
+                    if (folder) folder.tracking_status = next;
+                } else {
+                    const apply = (list) => {
+                        const row = (list || []).find(s => String(s.id) === String(id));
+                        if (row) row.tracking_status = next;
+                    };
+                    apply(user.scripts);
+                    (user.folders || []).forEach(f => apply(f.scripts));
+                }
+            }
+        } catch (e) {
+            alert(String(e.message || e));
+        } finally {
+            sel.disabled = false;
+        }
+    }
+
+    function toggleStFolder(headEl) {
+        const group = headEl && headEl.closest('.st-group');
+        if (!group) return;
+        group.classList.toggle('is-open');
+        const id = group.getAttribute('data-id');
+        if (group.classList.contains('is-open')) _stOpenFolders.add(id);
+        else _stOpenFolders.delete(id);
+    }
+
+    async function loadScheduleTracking() {
+        if (!REPORTS_CFG.isAdmin || !REPORTS_CFG.scheduleTrackingUrl) return;
+        const usersView = document.getElementById('stUsersView');
+        const detailBody = document.getElementById('stUserDetailBody');
+        const keepUser = _stSelectedUserId;
+        if (!_stSelectedUserId && usersView) {
+            usersView.innerHTML = '<div class="empty-hint">Loading users…</div>';
+        } else if (_stSelectedUserId && detailBody) {
+            detailBody.innerHTML = '<div class="empty-hint">Refreshing…</div>';
+        }
+
+        const params = new URLSearchParams();
+        const map = {
+            user_id: 'stUser',
+            worker: 'stWorker',
+            search: 'stSearch',
+            status: 'stStatus',
+            date_from: 'stFrom',
+            date_to: 'stTo',
+        };
+        Object.keys(map).forEach(key => {
+            const el = document.getElementById(map[key]);
+            if (el && el.value) params.set(key, el.value);
+        });
+
+        try {
+            const res = await fetch(REPORTS_CFG.scheduleTrackingUrl + '?' + params.toString(), { cache: 'no-store' });
+            const data = await res.json();
+            if (data.status !== 'ok' && data.error) {
+                const err = `<div class="empty-hint" style="color:#f87171;">${escapeHtml(data.error)}</div>`;
+                if (usersView) usersView.innerHTML = err;
+                if (detailBody) detailBody.innerHTML = err;
+                return;
+            }
+            const filters = data.filters || {};
+            stFillSelect(document.getElementById('stUser'), filters.users || [], 'id', 'username');
+            stFillSelect(document.getElementById('stWorker'), filters.workers || []);
+
+            const summary = data.summary || {};
+            const su = document.getElementById('stSumUsers');
+            const sf = document.getElementById('stSumFolders');
+            const ss = document.getElementById('stSumScripts');
+            if (su) su.textContent = String(summary.users != null ? summary.users : (data.users || []).length);
+            if (sf) sf.textContent = String(summary.folder_groups != null ? summary.folder_groups : 0);
+            if (ss) ss.textContent = String(summary.regular_scripts != null ? summary.regular_scripts : 0);
+
+            _stUsersCache = data.users || [];
+            renderUserList(_stUsersCache);
+            _stLoadedOnce = true;
+
+            if (keepUser) {
+                const still = _stUsersCache.find(u => String(u.user_id) === String(keepUser));
+                if (still) stOpenUser(keepUser);
+                else stShowUsersView();
+            }
+        } catch (e) {
+            const err = `<div class="empty-hint" style="color:#f87171;">${escapeHtml(String(e.message || e))}</div>`;
+            if (usersView) usersView.innerHTML = err;
+            if (detailBody) detailBody.innerHTML = err;
+        }
+    }
+
+    function syncStDateRangeHidden(selectedDates, instance) {
+        const fromInput = document.getElementById('stFrom');
+        const toInput = document.getElementById('stTo');
+        if (!fromInput || !toInput) return;
+        if (!selectedDates || !selectedDates.length) {
+            fromInput.value = '';
+            toInput.value = '';
+            return;
+        }
+        const fmt = (d) => instance.formatDate(d, 'Y-m-d');
+        let start = selectedDates[0];
+        let end = selectedDates.length > 1 ? selectedDates[1] : selectedDates[0];
+        if (start && end && start.getTime() > end.getTime()) {
+            const tmp = start;
+            start = end;
+            end = tmp;
+            if (instance && typeof instance.setDate === 'function') {
+                instance.setDate([start, end], false);
+            }
+        }
+        fromInput.value = start ? fmt(start) : '';
+        toInput.value = end ? fmt(end) : '';
+    }
+
+    function resetStFilters() {
+        ['stUser','stWorker','stSearch','stStatus'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const range = document.getElementById('stDateRange');
+        if (range && range._flatpickr) range._flatpickr.clear();
+        else if (range) range.value = '';
+        const from = document.getElementById('stFrom');
+        const to = document.getElementById('stTo');
+        if (from) from.value = '';
+        if (to) to.value = '';
+        stShowUsersView();
+        loadScheduleTracking();
+    }
+
+    
+    document.addEventListener("DOMContentLoaded", function() {
+        if (typeof flatpickr === 'function') {
+            const stRange = document.getElementById('stDateRange');
+            if (stRange) {
+                flatpickr(stRange, {
+                    mode: 'range',
+                    enableTime: false,
+                    dateFormat: 'Y-m-d',
+                    allowInput: false,
+                    disableMobile: true,
+                    onChange: syncStDateRangeHidden,
+                    onClose: function (selectedDates, _dateStr, instance) {
+                        syncStDateRangeHidden(selectedDates, instance);
+                    },
+                });
+            }
+
+            const rangeInput = document.getElementById('dateRangeInput');
+            const fromHidden = document.getElementById('dateFromInput');
+            const toHidden = document.getElementById('dateToInput');
+            if (rangeInput) {
+                const defaults = [];
+                if (fromHidden && fromHidden.value) defaults.push(fromHidden.value);
+                if (toHidden && toHidden.value) {
+                    if (!defaults.length || toHidden.value !== defaults[0]) defaults.push(toHidden.value);
+                    else if (defaults.length === 1) defaults.push(toHidden.value);
+                }
+                // Normalize inverted saved values into start → end for display
+                if (defaults.length === 2 && defaults[0] > defaults[1]) {
+                    defaults.reverse();
+                    if (fromHidden) fromHidden.value = defaults[0];
+                    if (toHidden) toHidden.value = defaults[1];
+                }
+                flatpickr(rangeInput, {
+                    mode: 'range',
+                    enableTime: false,
+                    dateFormat: 'Y-m-d',
+                    allowInput: false,
+                    disableMobile: true,
+                    defaultDate: defaults.length ? defaults : null,
+                    onChange: syncReportsDateRangeHidden,
+                    onClose: function (selectedDates, _dateStr, instance) {
+                        syncReportsDateRangeHidden(selectedDates, instance);
+                    },
+                });
+                // Ensure hidden fields match initial picker state
+                if (rangeInput._flatpickr) {
+                    syncReportsDateRangeHidden(rangeInput._flatpickr.selectedDates, rangeInput._flatpickr);
+                }
+            }
+        }
+        document.querySelectorAll('.js-progress-fill').forEach(el => {
+            el.style.width = el.getAttribute('data-width') + '%';
+        });
+
+        const stApply = document.getElementById('stApply');
+        const stReset = document.getElementById('stReset');
+        const stBack = document.getElementById('stBackUsers');
+        if (stApply) stApply.addEventListener('click', loadScheduleTracking);
+        if (stReset) stReset.addEventListener('click', resetStFilters);
+        if (stBack) stBack.addEventListener('click', function () {
+            stShowUsersView();
+        });
+        const stChatSend = document.getElementById('stChatSend');
+        if (stChatSend) stChatSend.addEventListener('click', sendStChat);
+        const stChatActions = document.getElementById('stChatActions');
+        if (stChatActions) {
+            stChatActions.addEventListener('click', function (ev) {
+                const btn = ev.target && ev.target.closest ? ev.target.closest('.st-chat-action') : null;
+                if (!btn) return;
+                _stChatAction = btn.getAttribute('data-action') || 'bug';
+                stChatActions.querySelectorAll('.st-chat-action').forEach(el => {
+                    el.classList.toggle('is-on', el === btn);
+                });
+            });
+        }
+        
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                const chatModal = document.getElementById('stChatModal');
+                if (chatModal && chatModal.style.display !== 'none') {
+                    closeStChatModal();
+                    return;
+                }
+                if (_stSelectedUserId) {
+                    stShowUsersView();
+                    return;
+                }
+                ['errorModal', 'addFolderWatchlistModal', 'allFoldersModal', 'allErrorsModal', 'allScriptsModal'].forEach(id => {
+                    const modal = document.getElementById(id);
+                    if (modal && modal.style.display !== 'none') {
+                        modal.style.display = 'none';
+                    }
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}

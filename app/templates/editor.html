@@ -1,0 +1,2409 @@
+{% extends "base.html" %}
+
+{% block title %}Editor · AutoControl{% endblock %}
+{% block page_title %}Remote File Editor{% endblock %}
+
+{% block content %}
+<!-- CodeMirror Stylesheets for Professional Syntax Highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/material-darker.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/neo.min.css">
+
+<style>
+    /* Variable Fallbacks & Core Modern UI Styles */
+    :root {
+        --editor-bg-dark: #12131a;
+        --editor-bg-light: #f8fafc;
+        --panel-border: rgba(226, 232, 240, 0.08);
+        --panel-border-light: rgba(15, 23, 42, 0.08);
+        --primary-accent: #3b82f6;
+        --primary-accent-hover: #2563eb;
+        --success-accent: #10b981;
+        --bg-surface-card: #181922;
+        --bg-surface-card-light: #ffffff;
+        --text-muted-custom: #94a3b8;
+    }
+
+    /* Custom layout alignments */
+    .editor-layout {
+        display: flex;
+        gap: 1.25rem;
+        height: calc(100vh - 180px);
+        min-height: 650px;
+        margin-bottom: 2rem;
+    }
+
+    /* Accessible Files Sidebar */
+    .file-list-sidebar {
+        width: 340px;
+        background: var(--surface, var(--bg-surface-card));
+        border: 1px solid var(--border, var(--panel-border));
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.15);
+        transition: all 0.2s ease;
+    }
+
+    .sidebar-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--border, var(--panel-border));
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .sidebar-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .sidebar-title {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--text, #f8fafc);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .sidebar-search-container {
+        position: relative;
+    }
+
+    .sidebar-search {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border, var(--panel-border));
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem 0.5rem 2rem;
+        font-size: 0.8rem;
+        color: var(--text, #e2e8f0);
+        outline: none;
+        transition: all 0.2s;
+    }
+
+    .sidebar-search:focus {
+        border-color: var(--primary-accent);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .search-icon-svg {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted-custom);
+        pointer-events: none;
+    }
+
+    /* Sidebar Advanced Filters & Sorting Controls */
+    .sidebar-filters {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .filter-select {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border, var(--panel-border));
+        color: var(--text, #cbd5e1);
+        font-size: 0.75rem;
+        padding: 0.4rem 0.5rem;
+        border-radius: 6px;
+        outline: none;
+        cursor: pointer;
+        transition: border 0.2s;
+        width: 100%;
+        text-overflow: ellipsis;
+    }
+
+    .filter-select:focus {
+        border-color: var(--primary-accent);
+    }
+
+    .sort-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(0, 0, 0, 0.1);
+        padding: 0.4rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid var(--border, var(--panel-border));
+    }
+
+    .sort-label {
+        font-size: 0.72rem;
+        color: var(--text-muted-custom);
+        font-weight: 500;
+    }
+
+    .sort-select {
+        background: transparent;
+        border: none;
+        color: var(--text, #f8fafc);
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        outline: none;
+        text-align: right;
+    }
+
+    /* Fix dropdown options for dark theme */
+    .filter-select option, 
+    .sort-select option {
+        background-color: var(--bg-surface-card, #1e293b);
+        color: var(--text, #f8fafc);
+    }
+
+    .file-items-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    /* Custom Scrollbar for file list */
+    .file-items-scroll::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .file-items-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .file-items-scroll::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    
+    .file-items-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* File Item Button Styling */
+    .file-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 0.85rem;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .file-item:hover {
+        background: rgba(255, 255, 255, 0.02);
+        border-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .file-item.active {
+        background: rgba(59, 130, 246, 0.08);
+        border-color: rgba(59, 130, 246, 0.25);
+    }
+
+    .file-icon-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 6px;
+        color: var(--text-muted-custom);
+        transition: all 0.2s;
+    }
+
+    .file-item.active .file-icon-box {
+        background: rgba(59, 130, 246, 0.15);
+        color: var(--primary-accent);
+    }
+
+    .file-item-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .file-item-title {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--text, #e2e8f0);
+        margin-bottom: 0.15rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .file-item-meta-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.72rem;
+        color: var(--text-muted-custom);
+    }
+
+    .file-item-meta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .file-item-date {
+        font-size: 0.68rem;
+        opacity: 0.8;
+    }
+
+    /* Editor Panel */
+    .editor-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface, var(--bg-surface-card));
+        border: 1px solid var(--border, var(--panel-border));
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.15);
+    }
+
+    .editor-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        background: rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid var(--border, var(--panel-border));
+    }
+
+    .editor-breadcrumbs {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        color: var(--text-muted-custom);
+    }
+
+    .breadcrumb-node {
+        color: var(--text, #f8fafc);
+        font-weight: 600;
+    }
+
+    .editor-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    /* Custom Refined Buttons */
+    .editor-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        font-size: 0.8rem;
+        padding: 0.5rem 0.9rem;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .editor-btn-secondary {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+        color: var(--text, #e2e8f0);
+    }
+
+    .editor-btn-secondary:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .editor-btn-primary {
+        background: var(--primary-accent);
+        border-color: var(--primary-accent-hover);
+        color: #ffffff;
+    }
+
+    .editor-btn-primary:hover:not(:disabled) {
+        background: var(--primary-accent-hover);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .editor-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    /* Editor Text Container & CodeMirror Overrides */
+    .editor-container {
+        position: relative;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--editor-bg-dark);
+        min-height: 0;
+        /* Ensures flex child can scroll */
+    }
+
+    /* Seamless Integration of CodeMirror */
+    .CodeMirror {
+        flex: 1;
+        height: 100% !important;
+        /* Force to fill container, not content */
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, Consolas, monospace;
+        font-size: 0.85rem;
+        line-height: 1.6;
+    }
+
+    /* Status Bar Inside Editor Pane */
+    .editor-statusbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.45rem 1rem;
+        background: rgba(0, 0, 0, 0.25);
+        border-top: 1px solid var(--border, var(--panel-border));
+        font-size: 0.72rem;
+        color: var(--text-muted-custom);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        z-index: 5;
+    }
+
+    .statusbar-info-segment {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .statusbar-badge {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.15rem 0.45rem;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+
+    /* Custom Overlaid Loading Glass State */
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(4px);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        z-index: 10;
+        border-radius: 0;
+    }
+
+    .shimmer-bar {
+        width: 120px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .shimmer-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, transparent, var(--primary-accent), transparent);
+        animation: shimmer-slide 1.5s infinite;
+    }
+
+    @keyframes shimmer-slide {
+        0% {
+            transform: translateX(-100%);
+        }
+
+        100% {
+            transform: translateX(100%);
+        }
+    }
+
+    .loading-text {
+        font-size: 0.8rem;
+        color: var(--text-muted-custom);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+
+    /* High Fidelity Table Section */
+    .section {
+        margin-top: 2.5rem;
+    }
+
+    .section-header-custom {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .section-header-custom h2 {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin: 0;
+        color: var(--text, #f8fafc);
+    }
+
+    .badge-history-count {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text, #cbd5e1);
+        padding: 0.2rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .table-container-card {
+        background: var(--surface, var(--bg-surface-card));
+        border: 1px solid var(--border, var(--panel-border));
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.1);
+    }
+
+    .data-table-modern {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 0.85rem;
+    }
+
+    .data-table-modern th {
+        background: rgba(0, 0, 0, 0.15);
+        padding: 0.95rem 1.25rem;
+        font-weight: 600;
+        color: var(--text-muted-custom);
+        border-bottom: 1px solid var(--border, var(--panel-border));
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+
+    .data-table-modern td {
+        padding: 0.95rem 1.25rem;
+        border-bottom: 1px solid var(--border, var(--panel-border));
+        color: var(--text, #cbd5e1);
+    }
+
+    .data-table-modern tr:last-child td {
+        border-bottom: none;
+    }
+
+    .data-table-modern tr:hover td {
+        background: rgba(255, 255, 255, 0.01);
+    }
+
+    /* Beautiful Action Badges */
+    .history-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.55rem;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+
+    .history-badge-primary {
+        background: rgba(59, 130, 246, 0.12);
+        color: #60a5fa;
+    }
+
+    .history-badge-muted {
+        background: rgba(148, 163, 184, 0.12);
+        color: #94a3b8;
+    }
+
+    .history-badge-secondary {
+        background: rgba(139, 92, 246, 0.12);
+        color: #a78bfa;
+    }
+
+    /* Light Theme Enhancements override */
+    html.light-theme {
+        --bg-surface-card: var(--bg-surface-card-light);
+        --panel-border: var(--panel-border-light);
+        --text-muted-custom: #64748b;
+    }
+
+    html.light-theme .file-list-sidebar,
+    html.light-theme .editor-main,
+    html.light-theme .table-container-card {
+        box-shadow: 0 4px 18px -4px rgba(15, 23, 42, 0.08);
+    }
+
+    html.light-theme .sidebar-search {
+        background: #f1f5f9;
+        color: #0f172a;
+    }
+
+    html.light-theme .sidebar-search:focus {
+        background: #ffffff;
+    }
+
+    html.light-theme .file-item:hover {
+        background: rgba(15, 23, 42, 0.02);
+    }
+
+    html.light-theme .file-item.active {
+        background: rgba(59, 130, 246, 0.06);
+    }
+
+    html.light-theme .editor-container {
+        background: var(--editor-bg-light);
+    }
+
+    html.light-theme .editor-toolbar,
+    html.light-theme .editor-statusbar,
+    html.light-theme .data-table-modern th {
+        background: #f1f5f9;
+    }
+
+    html.light-theme .loading-overlay {
+        background: rgba(255, 255, 255, 0.9);
+    }
+
+    html.light-theme .filter-select,
+    html.light-theme .sort-container {
+        background: #f1f5f9;
+        border-color: var(--panel-border-light);
+        color: #1e293b;
+    }
+
+    html.light-theme .sort-select {
+        color: #0f172a;
+    }
+
+    /* Client-side custom Toast notification styles */
+    .toast-container {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        pointer-events: none;
+    }
+
+    .toast {
+        background: #1e293b;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+        padding: 0.85rem 1.25rem;
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        font-size: 0.82rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        animation: toast-slide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: auto;
+    }
+
+    @keyframes toast-slide {
+        from {
+            transform: translateY(1rem);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    /* Editor Find Widget */
+    .editor-find-widget {
+        position: absolute;
+        top: 0;
+        right: 2rem;
+        background: var(--surface, var(--bg-surface-card));
+        border: 1px solid var(--border, var(--panel-border));
+        border-top: none;
+        border-bottom-left-radius: 6px;
+        border-bottom-right-radius: 6px;
+        padding: 0.5rem;
+        display: none;
+        align-items: center;
+        gap: 0.5rem;
+        z-index: 20;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    
+    .editor-find-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
+    .editor-find-input {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border, var(--panel-border));
+        border-radius: 4px;
+        padding: 0.3rem 3.5rem 0.3rem 0.5rem;
+        color: var(--text, #e2e8f0);
+        font-size: 0.8rem;
+        width: 220px;
+        outline: none;
+    }
+    
+    .editor-find-input:focus {
+        border-color: var(--primary-accent);
+    }
+    
+    .editor-find-toggles {
+        position: absolute;
+        right: 0.2rem;
+        display: flex;
+        gap: 0.1rem;
+    }
+    
+    .find-toggle {
+        background: transparent;
+        border: none;
+        color: var(--text-muted-custom);
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: bold;
+        padding: 0.1rem 0.2rem;
+        border-radius: 3px;
+    }
+    
+    .find-toggle:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .find-toggle.active {
+        color: var(--primary-accent);
+        background: rgba(59, 130, 246, 0.15);
+    }
+    
+    .find-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+    }
+    
+    .find-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted-custom);
+        cursor: pointer;
+        padding: 0.3rem;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .find-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text, #f8fafc);
+    }
+    
+    .find-count {
+        font-size: 0.75rem;
+        color: var(--text-muted-custom);
+        min-width: 50px;
+        text-align: center;
+    }
+    
+    .editor-empty-state {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: var(--editor-bg-dark);
+        color: var(--text-muted-custom);
+        gap: 1.5rem;
+    }
+
+    .empty-state-icon {
+        width: 64px;
+        height: 64px;
+        opacity: 0.5;
+        color: var(--primary-accent);
+    }
+
+    .empty-state-text {
+        font-size: 1.1rem;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+    }
+
+    .empty-state-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    html.light-theme .editor-empty-state {
+        background: var(--editor-bg-light);
+    }
+
+    /* Highlight styles in CodeMirror */
+    .cm-search-match {
+        background: rgba(234, 179, 8, 0.4);
+        color: #000000 !important;
+        border-radius: 2px;
+    }
+    
+    .cm-search-match-active {
+        background: rgba(234, 179, 8, 0.8);
+        color: #000000 !important;
+        border-radius: 2px;
+    }
+    
+    html.light-theme .editor-find-input {
+        background: #ffffff;
+        color: #1e293b;
+    }
+    html.light-theme .editor-find-widget {
+        background: #f8fafc;
+    }
+</style>
+
+<!-- Main Workspace Layout Grid -->
+<div class="editor-layout">
+    <!-- Sidebar Explorer Pane -->
+    <div class="file-list-sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title-row">
+                <h3 class="sidebar-title">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
+                        class="search-icon-svg" style="position: static; transform: none; color: inherit;">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M2.25 12.75V12A8.25 8.25 0 0 1 10.5 3.75h3A8.25 8.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z">
+                        </path>
+                    </svg>
+                    Accessible Files
+                </h3>
+            </div>
+
+            <!-- Sidebar Advanced Filters & Sorting Controls -->
+            <!-- Quick Search Input -->
+            <div class="sidebar-search-container" style="margin-bottom: 0.75rem; position: relative;">
+                <svg class="search-icon-svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                    viewBox="0 0 24 24" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--text-muted-custom); pointer-events: none;">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.603 10.603z"></path>
+                </svg>
+                <input type="text" class="sidebar-search" id="file-search-input"
+                    placeholder="Search by name or path...">
+            </div>
+            <div class="sidebar-filters">
+                <select class="filter-select" id="filter-worker" title="Filter by worker node">
+                    <option value="all">All Workers</option>
+                    {% for w in accessible_workers %}
+                    <option value="{{ w }}">{{ w }}</option>
+                    {% endfor %}
+                </select>
+                <select class="filter-select" id="filter-type" title="Filter by file type">
+                    <option value="">All Types</option>
+                </select>
+            </div>
+
+            <!-- Sorting Selector -->
+            <div class="sort-container">
+                <span class="sort-label">Sort by:</span>
+                <select class="sort-select" id="sort-files">
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="date-desc" selected>Newest First</option>
+                    <option value="date-asc">Oldest First</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="file-items-scroll" id="file-list-scrollable">
+            <div class="empty" id="sidebar-empty-state" style="padding: 2rem 1rem; font-size: 0.85rem; text-align: center; color: var(--text-muted-custom);">
+                Select a worker above to view its files.
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Code Editor Pane -->
+    <div class="editor-main">
+        <div class="editor-toolbar">
+            <div class="editor-breadcrumbs" id="editor-info-wrapper">
+                <span class="editor-info" id="editor-info">Select a file to view or edit</span>
+            </div>
+            <div class="editor-actions">
+                <button class="editor-btn editor-btn-secondary" id="btn-find" title="Find (Ctrl+F)">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.603 10.603z"></path>
+                    </svg>
+                    Find
+                </button>
+                <button class="editor-btn editor-btn-secondary" id="btn-refresh" disabled>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99">
+                        </path>
+                    </svg>
+                    Refresh
+                </button>
+                <button class="editor-btn editor-btn-primary" id="btn-save" disabled>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Save File
+                </button>
+                <span id="view-only-badge" class="statusbar-badge" style="display:none; background:rgba(148,163,184,0.2); color:var(--text-secondary, #94a3b8);">View only</span>
+            </div>
+        </div>
+
+        <div class="editor-empty-state" id="editor-empty-state">
+            <svg class="empty-state-icon" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 2.25H5.25A2.25 2.25 0 003 4.5v15A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V9l-6.75-6.75z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 2.25v6.75h6.75"></path>
+            </svg>
+            <div class="empty-state-text">No File Selected</div>
+        </div>
+
+        <div class="editor-container" id="editor-container" style="display: none;">
+            <!-- Find Widget -->
+            <div class="editor-find-widget" id="editor-find-widget">
+                <div class="editor-find-input-container">
+                    <input type="text" class="editor-find-input" id="editor-find-input" placeholder="Find">
+                    <div class="editor-find-toggles">
+                        <button class="find-toggle" id="find-case-toggle" title="Match Case">Aa</button>
+                        <button class="find-toggle" id="find-word-toggle" title="Match Whole Word">ab</button>
+                    </div>
+                </div>
+                <div class="find-count" id="find-count">No results</div>
+                <div class="find-actions">
+                    <button class="find-btn" id="btn-find-prev" title="Previous Match (Shift+Enter)">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5"></path></svg>
+                    </button>
+                    <button class="find-btn" id="btn-find-next" title="Next Match (Enter)">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path></svg>
+                    </button>
+                    <button class="find-btn" id="btn-find-close" title="Close (Escape)">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sleek Loading Mask overlay -->
+            <div class="loading-overlay" id="loading-overlay">
+                <div class="shimmer-bar"></div>
+                <div class="loading-text">Transferring File Data...</div>
+            </div>
+
+            <!-- Code Editor Target Base -->
+            <textarea class="editor-textarea" id="code-editor" readonly
+                placeholder="File content will appear here..."></textarea>
+
+            <!-- Contextual Status Info Bar -->
+            <div class="editor-statusbar">
+                <div class="statusbar-info-segment">
+                    <span id="editor-sync-badge" class="statusbar-badge">Ready</span>
+                    <span id="editor-char-counter">0 characters</span>
+                </div>
+                <div class="statusbar-info-segment">
+                    <span id="editor-language-badge" class="statusbar-badge">Plain Text</span>
+                    <span id="editor-line-indicator">Ln --, Col --</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FILE HISTORY SECTION -->
+<section class="section" id="file-change-ledger">
+    <div class="section-header-custom">
+        <h2>File Change Ledger</h2>
+        <span class="badge-history-count" id="history-count">{{ file_history|length }}</span>
+    </div>
+
+    <div class="table-container-card">
+        <table class="data-table-modern">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Worker Nodes</th>
+                    <th>Operator</th>
+                    <th>Target file path</th>
+                    <th>Trigger action</th>
+                    <th style="text-align: right;">Diff Changes</th>
+                </tr>
+            </thead>
+            <tbody id="file-tbody">
+                {% for record in file_history %}
+                <tr>
+                    <td class="mono" style="font-family: ui-monospace, monospace; font-size: 0.78rem;">{{
+                        record.created_at|human_dt if record.created_at else 'Unknown' }}</td>
+                    <td style="font-weight: 500;">{{ record.worker_name }}</td>
+                    <td>
+                        <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                            <span style="width: 6px; height: 6px; border-radius: 50%; background: #3b82f6;"></span>
+                            {{ record.username or 'System Action' }}
+                        </span>
+                    </td>
+                    <td class="mono"
+                        style="font-family: ui-monospace, monospace; font-size: 0.78rem; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                        title="{{ record.file_path }}">
+                        {{ record.file_path }}
+                    </td>
+                    <td>
+                        {% if record.action == 'File edited' %}
+                        <span class="history-badge history-badge-primary">{{ record.action }}</span>
+                        {% elif record.action == 'File viewed' %}
+                        <span class="history-badge history-badge-muted">{{ record.action }}</span>
+                        {% else %}
+                        <span class="history-badge history-badge-secondary">{{ record.action|replace('_', ' ')|title
+                            }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right;">
+                        {% if record.old_content is not none or record.new_content is not none %}
+                        <a href="{{ url_for('web.file_diff', history_id=record.id, back='editor') }}"
+                            class="editor-btn editor-btn-secondary"
+                            style="padding: 0.3rem 0.65rem; font-size: 0.75rem;">
+                            View Diff
+                        </a>
+                        {% else %}
+                        <span class="mono" style="color: var(--text-muted-custom); font-size: 0.75rem;">No
+                            modifications</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr class="empty">
+                    <td colspan="6" style="text-align: center; padding: 3rem 1rem; color: var(--text-muted-custom);">
+                        No historic operations registered.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Redesigned Pagination Footer component -->
+    <div class="pagination" id="file-pagination"
+        style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.25rem; display: none;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="pagination-info" style="color: var(--text-muted-custom); font-size: 0.82rem;">
+                Displaying <span class="page-start" style="font-weight: 600; color: var(--text);">1</span>–<span
+                    class="page-end" style="font-weight: 600; color: var(--text);">10</span> of <span class="page-total"
+                    style="font-weight: 600; color: var(--text);">0</span> log actions
+            </div>
+            <select class="page-size-select"
+                style="background: var(--surface, var(--bg-surface-card)); border: 1px solid var(--border, var(--panel-border)); color: var(--text); padding: 0.35rem 0.5rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; outline: none;">
+                <option value="10" selected>10 records</option>
+                <option value="25">25 records</option>
+                <option value="50">50 records</option>
+                <option value="100">100 records</option>
+            </select>
+        </div>
+        <div class="pagination-controls" style="display: flex; align-items: center; gap: 0.35rem;"></div>
+    </div>
+</section>
+
+<!-- Custom Clean Message Container (Replaces Browser Alerts) -->
+<div class="toast-container" id="toast-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<!-- CodeMirror Principal JavaScript Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+
+<!-- CodeMirror Syntactical Mode Extensions -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/shell/shell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/search/searchcursor.min.js"></script>
+
+<script>
+    const initWorker = "{{ init_worker }}";
+    const initPath = "{{ init_path }}";
+
+    let currentScriptId = null;
+    let currentWorkerName = null;
+    let currentFilePath = null;
+    let currentOriginalContent = "";
+    let pollInterval = null;
+    let codeMirrorInstance = null;
+    /** When false, editor is view-only (no Edit File permission). */
+    let canEditCurrentFile = false;
+
+    const fileItems = Array.from(document.querySelectorAll('.file-item'));
+    const editorInfo = document.getElementById('editor-info');
+    const codeEditorTextarea = document.getElementById('code-editor');
+    const btnRefresh = document.getElementById('btn-refresh');
+    const btnSave = document.getElementById('btn-save');
+    const viewOnlyBadge = document.getElementById('view-only-badge');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const syncBadge = document.getElementById('editor-sync-badge');
+    const charCounter = document.getElementById('editor-char-counter');
+    const lineIndicator = document.getElementById('editor-line-indicator');
+    const languageBadge = document.getElementById('editor-language-badge');
+
+    const searchInput = document.getElementById('file-search-input');
+    const workerFilter = document.getElementById('filter-worker');
+    const typeFilter = document.getElementById('filter-type');
+    const sortSelector = document.getElementById('sort-files');
+    const fileListContainer = document.getElementById('file-list-scrollable');
+
+    const emptyState = document.getElementById('editor-empty-state');
+    const editorContainer = document.getElementById('editor-container');
+
+    function setEditorEditable(canEdit) {
+        canEditCurrentFile = !!canEdit;
+        if (codeMirrorInstance) {
+            // true = view/select/copy allowed; typing/paste blocked (+ beforeChange guard)
+            codeMirrorInstance.setOption('readOnly', canEditCurrentFile ? false : true);
+        }
+        if (btnSave) {
+            btnSave.disabled = !canEditCurrentFile;
+            btnSave.style.display = canEditCurrentFile ? '' : 'none';
+        }
+        if (viewOnlyBadge) {
+            viewOnlyBadge.style.display = canEditCurrentFile ? 'none' : 'inline-flex';
+        }
+        if (codeEditorTextarea) {
+            codeEditorTextarea.readOnly = !canEditCurrentFile;
+        }
+    }
+
+    function showEmptyState() {
+        emptyState.style.display = 'flex';
+        editorContainer.style.display = 'none';
+        setEditorEditable(false);
+        btnRefresh.disabled = true;
+        const btnFind = document.getElementById('btn-find');
+        if (btnFind) btnFind.disabled = true;
+        editorInfo.innerHTML = `<span>No file selected</span>`;
+        charCounter.textContent = '0 characters';
+        lineIndicator.textContent = 'Ln --, Col --';
+        languageBadge.textContent = 'Plain Text';
+    }
+
+    function showEditor() {
+        emptyState.style.display = 'none';
+        editorContainer.style.display = 'flex';
+        const btnFind = document.getElementById('btn-find');
+        if (btnFind) btnFind.disabled = false;
+        btnRefresh.disabled = false;
+    }
+
+    // Integrated Toast system to avoid bad native window alerts
+    function displayToast(msg, isSuccess = false) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.style.borderLeft = isSuccess ? '3px solid #10b981' : '3px solid #ef4444';
+
+        toast.innerHTML = `
+        <svg width="16" height="16" fill="none" stroke="${isSuccess ? '#10b981' : '#ef4444'}" stroke-width="2" viewBox="0 0 24 24">
+            ${isSuccess
+                ? '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'
+                : '<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"></path>'}
+        </svg>
+        <span>${msg}</span>
+    `;
+
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'all 0.4s ease';
+            setTimeout(() => toast.remove(), 400);
+        }, 4500);
+    }
+
+    // CodeMirror Initialization
+    function initializeCodeMirror() {
+        const isLightTheme = document.documentElement.classList.contains('light-theme');
+
+        codeMirrorInstance = CodeMirror.fromTextArea(codeEditorTextarea, {
+            lineNumbers: true,
+            theme: isLightTheme ? 'neo' : 'material-darker',
+            mode: 'text/plain',
+            tabSize: 4,
+            indentUnit: 4,
+            lineWrapping: true,
+            readOnly: true,
+            // Finite margin: Infinity + large files breaks tokenization (plain white text on refresh)
+            viewportMargin: 80
+        });
+
+        // Hard block edits even if readOnly is briefly cleared during load
+        codeMirrorInstance.on('beforeChange', (cm, change) => {
+            if (!canEditCurrentFile && change.origin !== 'setValue') {
+                change.cancel();
+            }
+        });
+
+        // Mirror change events back to textarea if needed, and update stats
+        codeMirrorInstance.on('change', () => {
+            updateEditorMetrics();
+        });
+
+        codeMirrorInstance.on('cursorActivity', () => {
+            updateCursorLocation();
+        });
+    }
+
+    // Observe theme mutations to update CodeMirror theme in real-time
+    const themeObserver = new MutationObserver(() => {
+        if (codeMirrorInstance) {
+            const isLightTheme = document.documentElement.classList.contains('light-theme');
+            codeMirrorInstance.setOption('theme', isLightTheme ? 'neo' : 'material-darker');
+            requestAnimationFrame(() => codeMirrorInstance.refresh());
+        }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    // Detect language from file path extension and apply matching syntax mode
+    function detectEditorLanguageMode(filePath) {
+        if (!filePath) {
+            languageBadge.textContent = 'Plain Text';
+            return 'text/plain';
+        }
+        const ext = filePath.split('.').pop().toLowerCase();
+        switch (ext) {
+            case 'py':
+            case 'pyw':
+                languageBadge.textContent = 'Python';
+                return 'python';
+            case 'js':
+            case 'jsx':
+            case 'ts':
+            case 'tsx':
+                languageBadge.textContent = 'JavaScript';
+                return 'javascript';
+            case 'html':
+            case 'htm':
+                languageBadge.textContent = 'HTML';
+                return 'htmlmixed';
+            case 'css':
+            case 'scss':
+            case 'sass':
+                languageBadge.textContent = 'CSS';
+                return 'css';
+            case 'json':
+                languageBadge.textContent = 'JSON';
+                return { name: 'javascript', json: true };
+            case 'sh':
+            case 'bash':
+            case 'bat':
+            case 'cmd':
+            case 'ps1':
+                languageBadge.textContent = 'Shell';
+                return 'shell';
+            case 'yaml':
+            case 'yml':
+                languageBadge.textContent = 'YAML';
+                return 'yaml';
+            case 'xml':
+                languageBadge.textContent = 'XML';
+                return 'xml';
+            default:
+                languageBadge.textContent = 'Plain Text';
+                return 'text/plain';
+        }
+    }
+
+    /**
+     * Apply file contents into CodeMirror while keeping mode, theme, and (optionally) view.
+     * Re-applies language mode AFTER setValue and refreshes layout so large-file
+     * reloads keep syntax highlighting instead of plain white text.
+     */
+    function applyEditorDocument(content, pathName, options = {}) {
+        const preserveView = !!options.preserveView;
+        const text = content == null ? '' : String(content);
+        const mode = detectEditorLanguageMode(pathName || currentFilePath || '');
+
+        if (!codeMirrorInstance) {
+            codeEditorTextarea.value = text;
+            return;
+        }
+
+        let savedCursor = null;
+        let savedScroll = null;
+        if (preserveView) {
+            savedCursor = codeMirrorInstance.getCursor();
+            savedScroll = codeMirrorInstance.getScrollInfo();
+        }
+
+        const isLightTheme = document.documentElement.classList.contains('light-theme');
+        codeMirrorInstance.operation(() => {
+            codeMirrorInstance.setValue(text);
+            // Mode must be (re)applied after content so the highlighter re-tokenizes
+            codeMirrorInstance.setOption('mode', mode);
+            codeMirrorInstance.setOption('theme', isLightTheme ? 'neo' : 'material-darker');
+        });
+
+        if (preserveView && savedCursor) {
+            const lastLine = codeMirrorInstance.lastLine();
+            const line = Math.max(0, Math.min(savedCursor.line, lastLine));
+            const lineText = codeMirrorInstance.getLine(line) || '';
+            const ch = Math.max(0, Math.min(savedCursor.ch, lineText.length));
+            codeMirrorInstance.setCursor({ line, ch });
+            if (savedScroll) {
+                codeMirrorInstance.scrollTo(savedScroll.left, savedScroll.top);
+            }
+        } else {
+            codeMirrorInstance.setCursor({ line: 0, ch: 0 });
+            codeMirrorInstance.scrollTo(0, 0);
+        }
+
+        // Layout refresh: needed after overlay hide / large setValue
+        const refreshEditor = () => {
+            if (!codeMirrorInstance) return;
+            codeMirrorInstance.refresh();
+        };
+        requestAnimationFrame(() => {
+            refreshEditor();
+            setTimeout(refreshEditor, 40);
+            setTimeout(refreshEditor, 200);
+        });
+    }
+
+    // ==========================================
+    // SIDEBAR DYNAMIC FILE TREE (folder-wise, lazy-loaded)
+    // Compatible with DB-backed /files/list (direct children only)
+    // ==========================================
+    let currentSearch = '';
+    let currentTypeFilter = '';
+    let currentSort = 'date-desc';
+    const expandedFolders = new Set();
+    const childrenCache = {}; // key: `${worker}||${parentPath}` -> array of nodes
+    const loadingFolders = new Set();
+    const bodyEl = document.getElementById('file-list-scrollable');
+
+    const READABLE_EXTS = new Set([
+        'txt', 'py', 'pyw', 'java', 'log', 'md', 'csv', 'json', 'yaml', 'yml', 'xml',
+        'html', 'htm', 'css', 'scss', 'sass', 'js', 'jsx', 'ts', 'tsx', 'sh', 'bash',
+        'bat', 'cmd', 'ps1', 'ini', 'cfg', 'conf', 'toml', 'env', 'sql', 'rb', 'php',
+        'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'swift', 'kt', 'r', 'pl', 'lua'
+    ]);
+
+    const icons = {
+        folder: '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776"></path></svg>',
+        file: '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9z"></path></svg>',
+        python: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>',
+        javascript: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path><path d="M7 7h.01"></path></svg>',
+        html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4L18.1 21.4a2 2 0 0 1-1.92 1.6H7.82a2 2 0 0 1-1.92-1.6L4 4"></path><path d="M20 4H4"></path></svg>',
+        css: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4L18.1 21.4a2 2 0 0 1-1.92 1.6H7.82a2 2 0 0 1-1.92-1.6L4 4"></path><path d="M20 4H4"></path></svg>',
+        json: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>',
+        image: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>',
+        video: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>',
+        audio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>',
+        zip: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>',
+        chevronRight: '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"></path></svg>',
+        chevronDown: '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"></path></svg>'
+    };
+
+    const isTextFile = (filename) => {
+        const ext = (filename.split('.').pop() || '').toLowerCase();
+        return READABLE_EXTS.has(ext);
+    };
+
+    const getFileIcon = (filename) => {
+        const ext = filename.split('.').pop().toLowerCase();
+        if (['py', 'pyw'].includes(ext)) return icons.python;
+        if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) return icons.javascript;
+        if (['html', 'htm'].includes(ext)) return icons.html;
+        if (['css', 'scss', 'sass'].includes(ext)) return icons.css;
+        if (['json'].includes(ext)) return icons.json;
+        if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext)) return icons.image;
+        if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) return icons.video;
+        if (['mp3', 'wav', 'ogg'].includes(ext)) return icons.audio;
+        if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return icons.zip;
+        if (['bat', 'ps1', 'sh', 'cmd', 'bash'].includes(ext)) return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>`;
+        return icons.file;
+    };
+
+    const escapeJsStr = (str) => {
+        return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    };
+
+    const cacheKey = (worker, parentPath) => `${worker}||${parentPath || ''}`;
+
+    const filterReadableChildren = (files, worker) => {
+        const type = (currentTypeFilter || '').replace(/^\./, '').toLowerCase();
+        return (files || [])
+            .filter(f => {
+                if (f.type === 'folder') return true;
+                if (!isTextFile(f.name)) return false;
+                if (type) {
+                    const ext = (f.name.split('.').pop() || '').toLowerCase();
+                    return ext === type;
+                }
+                return true;
+            })
+            .map(f => ({
+                ...f,
+                path: (f.path || '').replace(/\\/g, '/'),
+                realPath: (f.path || '').replace(/\\/g, '/'),
+                workerName: worker,
+                children: f.type === 'folder' ? {} : undefined
+            }));
+    };
+
+    const fetchFolderChildren = async (worker, parentPath = '', force = false) => {
+        const key = cacheKey(worker, parentPath);
+        if (!force && childrenCache[key]) return childrenCache[key];
+        if (loadingFolders.has(key)) return childrenCache[key] || [];
+        loadingFolders.add(key);
+        try {
+            // Do NOT pass type filter to API — it would drop folders and break tree browsing.
+            // Readable + extension filtering is done client-side.
+            const searchParams = new URLSearchParams({
+                worker_name: worker,
+                base_path: parentPath || '/',
+                search: ''
+            });
+            const res = await fetch(`/files/list?${searchParams}`);
+            const data = await res.json();
+            if (data.error && !data.files) {
+                childrenCache[key] = [];
+                return [];
+            }
+            childrenCache[key] = filterReadableChildren(data.files || [], worker);
+            return childrenCache[key];
+        } catch (e) {
+            console.error('Folder fetch failed', worker, parentPath, e);
+            childrenCache[key] = [];
+            return [];
+        } finally {
+            loadingFolders.delete(key);
+        }
+    };
+
+    const fetchSearchResults = async (worker, query) => {
+        const searchParams = new URLSearchParams({
+            worker_name: worker,
+            base_path: '/',
+            search: query
+        });
+        const res = await fetch(`/files/list?${searchParams}`);
+        const data = await res.json();
+        return filterReadableChildren((data.files || []).filter(f => f.type === 'file'), worker);
+    };
+
+    const sortNodes = (a, b) => {
+        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+        if (currentSort === 'name-asc') return a.name.localeCompare(b.name);
+        if (currentSort === 'name-desc') return b.name.localeCompare(a.name);
+        if (currentSort === 'date-desc') return (b.mtime || 0) - (a.mtime || 0);
+        if (currentSort === 'date-asc') return (a.mtime || 0) - (b.mtime || 0);
+        return 0;
+    };
+
+    const buildHierarchy = (flatFiles) => {
+        const root = { children: {} };
+        flatFiles.forEach(file => {
+            const parts = file.path.split('/').filter(Boolean);
+            let current = root;
+            let currentPath = '';
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                currentPath += (currentPath ? '/' : '') + part;
+                if (!current.children[part]) {
+                    current.children[part] = {
+                        name: part,
+                        path: currentPath,
+                        realPath: file.realPath,
+                        workerName: file.workerName,
+                        type: i === parts.length - 1 ? file.type : 'folder',
+                        size: file.size,
+                        mtime: file.mtime,
+                        script_id: file.script_id,
+                        children: {}
+                    };
+                }
+                current = current.children[part];
+                expandedFolders.add(`${file.workerName}||${currentPath}`);
+            }
+        });
+        return root.children;
+    };
+
+    window.explToggleFolder = async (worker, path) => {
+        const key = cacheKey(worker, path);
+        if (expandedFolders.has(key)) {
+            expandedFolders.delete(key);
+            renderTree();
+            return;
+        }
+        expandedFolders.add(key);
+        renderTree(); // show chevron open + loading placeholder
+        await fetchFolderChildren(worker, path);
+        renderTree();
+    };
+
+    const renderNode = (node) => {
+        const isFolder = node.type === 'folder';
+        const folderKey = cacheKey(node.workerName, node.path);
+        const isExpanded = expandedFolders.has(folderKey);
+
+        let html = '';
+        if (isFolder) {
+            const kids = childrenCache[folderKey];
+            const isLoading = loadingFolders.has(folderKey);
+            html += `
+                <li>
+                    <div class="folder-row" style="padding: 0.35rem 0.5rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; border-radius: 4px; transition: background 0.2s;" onclick="explToggleFolder('${escapeJsStr(node.workerName)}', '${escapeJsStr(node.path)}')">
+                        <div style="display:flex; align-items:center; color: var(--text-muted-custom);">
+                            ${isExpanded ? icons.chevronDown : icons.chevronRight}
+                        </div>
+                        <div style="color: var(--primary-accent); display:flex; align-items:center;">${icons.folder}</div>
+                        <div style="font-size: 0.85rem; color: var(--text); user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${node.name}">${node.name}</div>
+                    </div>
+            `;
+            if (isExpanded) {
+                html += `<ul class="file-tree-ul" style="list-style: none; padding-left: 1.25rem; margin: 0; border-left: 1px solid var(--panel-border);">`;
+                if (isLoading && !kids) {
+                    html += `<li><div style="color:var(--text-muted-custom); padding:0.35rem 0.5rem; font-size: 0.75rem;">Loading...</div></li>`;
+                } else {
+                    const childNodes = (kids || []).slice().sort(sortNodes);
+                    if (!childNodes.length) {
+                        html += `<li><div style="color:var(--text-muted-custom); padding:0.35rem 0.5rem; font-size: 0.75rem; font-style:italic;">Empty folder</div></li>`;
+                    } else if (childNodes.length > 250) {
+                        html += childNodes.slice(0, 250).map(c => renderNode(c)).join('');
+                        html += `<li><div style="color:var(--text-muted-custom); padding:0.5rem; font-style:italic; font-size: 0.8rem;">...and ${childNodes.length - 250} more items</div></li>`;
+                    } else {
+                        html += childNodes.map(c => renderNode(c)).join('');
+                    }
+                }
+                html += `</ul>`;
+            }
+            html += `</li>`;
+        } else {
+            const canEdit = isTextFile(node.name);
+            const clickHandler = canEdit ? `onclick="handleFileClick('${escapeJsStr(node.workerName)}', '${escapeJsStr(node.realPath)}', '${escapeJsStr(node.name)}', ${node.script_id ? `'${node.script_id}'` : 'null'})"` : '';
+            const opacity = canEdit ? '1' : '0.5';
+            const cursor = canEdit ? 'pointer' : 'not-allowed';
+            const displayName = currentSearch ? node.path : node.name;
+
+            html += `
+                <li>
+                    <div class="file-row file-item ${currentFilePath === node.realPath && currentWorkerName === node.workerName ? 'active' : ''}" style="padding: 0.35rem 0.5rem; cursor: ${cursor}; display: flex; align-items: center; gap: 0.5rem; border-radius: 4px; transition: background 0.2s; opacity: ${opacity};" ${clickHandler}>
+                        <div style="display:flex; align-items:center;">${getFileIcon(node.name)}</div>
+                        <div style="font-size: 0.85rem; color: var(--text); user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${node.path}">${displayName}</div>
+                    </div>
+                </li>
+            `;
+        }
+        return html;
+    };
+
+    window.handleFileClick = (worker, path, name, scriptId) => {
+        currentScriptId = scriptId || null;
+        currentWorkerName = worker;
+        currentFilePath = path;
+
+        editorInfo.innerHTML = `
+            <span>${worker}</span>
+            <span style="opacity: 0.4">/</span>
+            <span class="breadcrumb-node">${name}</span>
+        `;
+        btnRefresh.disabled = false;
+
+        renderTree();
+
+        // Prefer path-based load so Edit File gates can_edit (not script ownership)
+        if (worker && path) {
+            loadFileByPath(worker, path);
+        } else if (scriptId) {
+            loadFile(scriptId, path);
+        }
+    };
+
+    const renderSearchHierarchy = (flatFiles) => {
+        const hierarchy = buildHierarchy(flatFiles);
+        const topNodes = Object.values(hierarchy).sort(sortNodes);
+        if (!topNodes.length) {
+            bodyEl.innerHTML = `<div style="text-align:center; padding: 4rem; color: var(--text-muted-custom);">No matching readable files.</div>`;
+            return;
+        }
+        let html = `<ul class="file-tree-ul root" style="list-style: none; padding: 0.5rem; margin: 0;">`;
+        const renderSearchNode = (node) => {
+            if (node.type === 'folder') {
+                const childNodes = Object.values(node.children || {}).sort(sortNodes);
+                let h = `
+                    <li>
+                        <div class="folder-row" style="padding: 0.35rem 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <div style="color: var(--primary-accent); display:flex;">${icons.folder}</div>
+                            <div style="font-size: 0.85rem; color: var(--text);">${node.name}</div>
+                        </div>
+                        <ul class="file-tree-ul" style="list-style: none; padding-left: 1.25rem; margin: 0; border-left: 1px solid var(--panel-border);">
+                            ${childNodes.map(renderSearchNode).join('')}
+                        </ul>
+                    </li>`;
+                return h;
+            }
+            return renderNode(node);
+        };
+        html += topNodes.map(renderSearchNode).join('');
+        html += `</ul>`;
+        bodyEl.innerHTML = html;
+    };
+
+    const renderTree = () => {
+        const selected = workerFilter.value;
+        if (!selected) {
+            bodyEl.innerHTML = `<div class="empty" style="padding: 2rem 1rem; font-size: 0.85rem; text-align: center; color: var(--text-muted-custom);">Select a worker above to view its files.</div>`;
+            return;
+        }
+
+        // Search mode: flat/global readable hits grouped by folder
+        if (currentSearch) {
+            if (window._editorSearchResults) {
+                renderSearchHierarchy(window._editorSearchResults);
+            }
+            return;
+        }
+
+        let topNodes = [];
+        if (selected === 'all') {
+            const workers = Array.from(workerFilter.options).map(o => o.value).filter(v => v && v !== 'all');
+            topNodes = workers.map(w => ({
+                name: w,
+                path: '',
+                realPath: '',
+                workerName: w,
+                type: 'folder',
+                mtime: 0,
+                isWorkerRoot: true
+            }));
+            // Worker roots use cache key worker||'' for their SCRIPTS_DIR root
+        } else {
+            topNodes = (childrenCache[cacheKey(selected, '')] || []).slice().sort(sortNodes);
+        }
+
+        if (!topNodes.length) {
+            bodyEl.innerHTML = `<div style="text-align:center; padding: 4rem; color: var(--text-muted-custom);">No readable files or folders found.</div>`;
+            return;
+        }
+
+        // For "all" workers, renderNode uses path '' and workerName = worker — expanding loads that worker root
+        let html = `<ul class="file-tree-ul root" style="list-style: none; padding: 0.5rem; margin: 0;">`;
+        if (topNodes.length > 250) {
+            html += topNodes.slice(0, 250).map(n => renderNode(n)).join('');
+            html += `<li><div style="color:var(--text-muted-custom); padding:1rem; font-style:italic; font-size: 0.85rem;">...and ${topNodes.length - 250} more items</div></li>`;
+        } else {
+            html += topNodes.map(n => renderNode(n)).join('');
+        }
+        html += `</ul>`;
+        bodyEl.innerHTML = html;
+    };
+
+    const clearChildrenCache = () => {
+        Object.keys(childrenCache).forEach(k => delete childrenCache[k]);
+        expandedFolders.clear();
+        window._editorSearchResults = null;
+    };
+
+    const fetchWorkerFiles = async (worker) => {
+        if (!worker) {
+            bodyEl.innerHTML = `<div class="empty" style="padding: 2rem 1rem; font-size: 0.85rem; text-align: center; color: var(--text-muted-custom);">Select a worker above to view its files.</div>`;
+            return;
+        }
+        clearChildrenCache();
+        bodyEl.innerHTML = `<div style="text-align:center; padding: 4rem; color: var(--text-muted-custom);">Loading files...</div>`;
+        try {
+            if (worker === 'all') {
+                // Preload nothing heavy — worker folders expand on demand
+                renderTree();
+            } else {
+                await fetchFolderChildren(worker, '', true);
+                renderTree();
+            }
+        } catch (e) {
+            bodyEl.innerHTML = `<div style="text-align:center; padding: 4rem; color: var(--fx-danger);">Network Error</div>`;
+        }
+    };
+
+    const fetchWorkerTypes = async (worker) => {
+        if (worker === 'all') {
+            typeFilter.innerHTML = '<option value="">All Types</option>' +
+                Array.from(READABLE_EXTS).sort().map(t => `<option value="${t}">.${t}</option>`).join('');
+            return;
+        }
+        try {
+            const res = await fetch(`/files/types?worker_name=${worker}`);
+            const data = await res.json();
+            if (data.types) {
+                const currentVal = typeFilter.value;
+                const allowedTypes = data.types
+                    .map(t => t.replace(/^\./, '').toLowerCase())
+                    .filter(t => READABLE_EXTS.has(t));
+                typeFilter.innerHTML = '<option value="">All Types</option>' +
+                    allowedTypes.map(t => `<option value="${t}">.${t}</option>`).join('');
+                if (allowedTypes.includes(currentVal)) {
+                    typeFilter.value = currentVal;
+                } else {
+                    currentTypeFilter = '';
+                }
+            }
+        } catch (e) { }
+    };
+
+    let searchTimeout = null;
+    const runSearch = async () => {
+        const selected = workerFilter.value;
+        if (!selected || !currentSearch) {
+            window._editorSearchResults = null;
+            renderTree();
+            return;
+        }
+        bodyEl.innerHTML = `<div style="text-align:center; padding: 2rem; color: var(--text-muted-custom);">Searching...</div>`;
+        try {
+            let results = [];
+            if (selected === 'all') {
+                const workers = Array.from(workerFilter.options).map(o => o.value).filter(v => v && v !== 'all');
+                for (const w of workers) {
+                    try {
+                        const hits = await fetchSearchResults(w, currentSearch);
+                        results = results.concat(hits);
+                    } catch (e) { }
+                }
+            } else {
+                results = await fetchSearchResults(selected, currentSearch);
+            }
+            window._editorSearchResults = results;
+            renderTree();
+        } catch (e) {
+            bodyEl.innerHTML = `<div style="text-align:center; padding: 2rem; color: var(--fx-danger);">Search failed</div>`;
+        }
+    };
+
+    workerFilter.addEventListener('change', (e) => {
+        currentWorkerName = e.target.value === 'all' ? currentWorkerName : e.target.value;
+        currentSearch = '';
+        if (searchInput) searchInput.value = '';
+        fetchWorkerTypes(e.target.value);
+        fetchWorkerFiles(e.target.value);
+    });
+
+    searchInput.addEventListener('input', (e) => {
+        currentSearch = e.target.value.trim().toLowerCase();
+        if (searchTimeout) clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(runSearch, 300);
+    });
+
+    typeFilter.addEventListener('change', (e) => {
+        currentTypeFilter = e.target.value.toLowerCase().replace(/^\./, '');
+        clearChildrenCache();
+        if (currentSearch) runSearch();
+        else if (workerFilter.value) fetchWorkerFiles(workerFilter.value);
+    });
+
+    sortSelector.addEventListener('change', (e) => {
+        currentSort = e.target.value;
+        renderTree();
+    });
+
+
+    // Sync Metrics inside statusbar
+    function updateEditorMetrics() {
+        if (!codeMirrorInstance) return;
+        const text = codeMirrorInstance.getValue();
+        charCounter.textContent = `${text.length} characters`;
+
+        // Check if edited relative to saved copy
+        if (text !== currentOriginalContent) {
+            syncBadge.textContent = 'Modified';
+            syncBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+            syncBadge.style.color = '#f59e0b';
+        } else {
+            syncBadge.textContent = 'Synced';
+            syncBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+            syncBadge.style.color = '#10b981';
+        }
+    }
+
+    function updateCursorLocation() {
+        if (!codeMirrorInstance) return;
+        const cursor = codeMirrorInstance.getCursor();
+        lineIndicator.textContent = `Ln ${cursor.line + 1}, Col ${cursor.ch + 1}`;
+    }
+
+    // Removed old static fileItems event listeners
+
+    btnRefresh.addEventListener('click', () => {
+        if (!currentFilePath && !currentScriptId) return;
+        // Reload from worker while preserving cursor/scroll + syntax mode
+        if (currentWorkerName && currentFilePath) loadFileByPath(currentWorkerName, currentFilePath, { preserveView: true });
+        else if (currentScriptId) loadFile(currentScriptId, currentFilePath, { preserveView: true });
+    });
+
+    btnSave.addEventListener('click', () => {
+        if (!canEditCurrentFile) {
+            displayToast('View only — Edit File permission required to save', false);
+            return;
+        }
+        const value = codeMirrorInstance ? codeMirrorInstance.getValue() : '';
+        // Prefer path save so Edit File is enforced the same way as explorer opens
+        if (currentWorkerName && currentFilePath) saveFileByPath(currentWorkerName, currentFilePath, value);
+        else if (currentScriptId) saveFile(currentScriptId, value);
+    });
+
+    function showLoading() {
+        loadingOverlay.style.display = 'flex';
+        if (codeMirrorInstance) codeMirrorInstance.setOption('readOnly', 'nocursor');
+        btnSave.disabled = true;
+        btnRefresh.disabled = true;
+        syncBadge.textContent = 'Transferring';
+        syncBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+        syncBadge.style.color = '#3b82f6';
+    }
+
+    function hideLoading() {
+        loadingOverlay.style.display = 'none';
+        setEditorEditable(canEditCurrentFile);
+        if (codeMirrorInstance) {
+            requestAnimationFrame(() => {
+                codeMirrorInstance.refresh();
+                setTimeout(() => codeMirrorInstance && codeMirrorInstance.refresh(), 50);
+            });
+        }
+        btnRefresh.disabled = false;
+        updateEditorMetrics();
+    }
+
+    function pollCommand(cmdId, onSuccess, onError) {
+        if (pollInterval) clearInterval(pollInterval);
+
+        const startedAt = Date.now();
+        const maxWaitMs = 90000; // fail clearly instead of spinning for minutes
+
+        const checkStatus = async () => {
+            try {
+                if (Date.now() - startedAt > maxWaitMs) {
+                    clearInterval(pollInterval);
+                    onError('Timed out waiting for worker. The worker may be busy syncing files — try again in a moment.');
+                    return;
+                }
+                const res = await fetch(`/api/editor/poll/${cmdId}`);
+                const data = await res.json();
+                if (data.status === 'completed') {
+                    clearInterval(pollInterval);
+                    onSuccess(data);
+                } else if (data.status === 'error') {
+                    clearInterval(pollInterval);
+                    onError(data.error || 'Unknown error occurred.');
+                }
+            } catch (e) {
+                clearInterval(pollInterval);
+                onError(e.message);
+            }
+        };
+
+        // Check immediately, then every 500ms
+        checkStatus();
+        pollInterval = setInterval(checkStatus, 500);
+    }
+
+    async function loadFile(scriptId, pathName, options = {}) {
+        showEditor();
+        showLoading();
+        const preserveView = !!options.preserveView;
+        try {
+            const res = await fetch('/api/editor/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script_id: scriptId })
+            });
+            const data = await res.json();
+            if (data.error) {
+                displayToast(data.error, false);
+                canEditCurrentFile = false;
+                hideLoading();
+                return;
+            }
+            canEditCurrentFile = !!data.can_edit;
+
+            pollCommand(data.cmd_id,
+                (result) => {
+                    const content = result.content || "";
+                    applyEditorDocument(content, pathName || currentFilePath, { preserveView });
+                    currentOriginalContent = content;
+                    hideLoading();
+                    displayToast(
+                        preserveView
+                            ? "File refreshed"
+                            : (canEditCurrentFile ? "Loaded script contents successfully" : "Opened in view-only mode"),
+                        true
+                    );
+                },
+                (errorMsg) => {
+                    displayToast("Failed to load file: " + errorMsg, false);
+                    hideLoading();
+                }
+            );
+        } catch (e) {
+            displayToast("Error requesting file: " + e.message, false);
+            hideLoading();
+        }
+    }
+
+    async function saveFile(scriptId, content) {
+        if (!canEditCurrentFile) {
+            displayToast('View only — Edit File permission required to save', false);
+            return;
+        }
+        showLoading();
+        try {
+            const res = await fetch('/api/editor/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    script_id: scriptId,
+                    content: content,
+                    old_content: currentOriginalContent
+                })
+            });
+            const data = await res.json();
+            if (data.error) {
+                displayToast(data.error, false);
+                hideLoading();
+                return;
+            }
+
+            pollCommand(data.cmd_id,
+                (result) => {
+                    currentOriginalContent = content;
+                    btnSave.innerHTML = `
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"></path>
+                    </svg>
+                    Saved!
+                `;
+                    setTimeout(() => {
+                        btnSave.innerHTML = `
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Save File
+                    `;
+                    }, 2000);
+                    refreshHistoryTable();
+                    hideLoading();
+                    displayToast("File state committed securely", true);
+                },
+                (errorMsg) => {
+                    displayToast("Failed to save file: " + errorMsg, false);
+                    hideLoading();
+                }
+            );
+        } catch (e) {
+            displayToast("Error saving file: " + e.message, false);
+            hideLoading();
+        }
+    }
+
+    async function loadFileByPath(workerName, filePath, options = {}) {
+        showEditor();
+        showLoading();
+        const preserveView = !!options.preserveView;
+        try {
+            const res = await fetch('/api/editor/read_path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ worker_name: workerName, file_path: filePath })
+            });
+            const data = await res.json();
+            if (data.error) {
+                displayToast(data.error, false);
+                canEditCurrentFile = false;
+                hideLoading();
+                return;
+            }
+            canEditCurrentFile = !!data.can_edit;
+
+            pollCommand(data.cmd_id,
+                (result) => {
+                    const content = result.content || "";
+                    applyEditorDocument(content, filePath, { preserveView });
+                    currentOriginalContent = content;
+                    hideLoading();
+                    displayToast(
+                        preserveView
+                            ? "File refreshed"
+                            : (canEditCurrentFile ? "Loaded script contents successfully" : "Opened in view-only mode"),
+                        true
+                    );
+                },
+                (errorMsg) => {
+                    displayToast("Failed to load file: " + errorMsg, false);
+                    hideLoading();
+                }
+            );
+        } catch (e) {
+            displayToast("Error requesting file: " + e.message, false);
+            hideLoading();
+        }
+    }
+
+    async function saveFileByPath(workerName, filePath, content) {
+        if (!canEditCurrentFile) {
+            displayToast('View only — Edit File permission required to save', false);
+            return;
+        }
+        showLoading();
+        try {
+            const res = await fetch('/api/editor/save_path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    worker_name: workerName,
+                    file_path: filePath,
+                    content: content,
+                    old_content: currentOriginalContent
+                })
+            });
+            const data = await res.json();
+            if (data.error) {
+                displayToast(data.error, false);
+                hideLoading();
+                return;
+            }
+
+            pollCommand(data.cmd_id,
+                (result) => {
+                    currentOriginalContent = content;
+                    btnSave.innerHTML = `
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"></path>
+                    </svg>
+                    Saved!
+                `;
+                    setTimeout(() => {
+                        btnSave.innerHTML = `
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Save File
+                    `;
+                    }, 2000);
+                    refreshHistoryTable();
+                    hideLoading();
+                    displayToast("File state committed securely", true);
+                },
+                (errorMsg) => {
+                    displayToast("Failed to save file: " + errorMsg, false);
+                    hideLoading();
+                }
+            );
+        } catch (e) {
+            displayToast("Error saving file: " + e.message, false);
+            hideLoading();
+        }
+    }
+
+    // Client-side Paginator Class
+    class TablePaginator {
+        constructor(tbodyId, paginationId, isJobTable = false) {
+            this.tbodyId = tbodyId;
+            this.paginationId = paginationId;
+            this.isJobTable = isJobTable;
+            this.pageSize = 10;
+            this.currentPage = 1;
+            this.init();
+        }
+
+        init() {
+            this.tbody = document.getElementById(this.tbodyId);
+            this.pagination = document.getElementById(this.paginationId);
+            if (!this.tbody || !this.pagination) return;
+
+            // Extract items
+            this.items = [];
+            const rows = Array.from(this.tbody.children);
+
+            if (this.isJobTable) {
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].classList.contains('empty')) continue;
+                    if (rows[i].classList.contains('job-row')) {
+                        const group = [rows[i]];
+                        if (i + 1 < rows.length && rows[i + 1].classList.contains('job-detail-row')) {
+                            group.push(rows[i + 1]);
+                            i++;
+                        }
+                        this.items.push(group);
+                    }
+                }
+            } else {
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].classList.contains('empty')) continue;
+                    this.items.push([rows[i]]);
+                }
+            }
+
+            this.totalItems = this.items.length;
+
+            const select = this.pagination.querySelector('.page-size-select');
+            if (select) {
+                select.onchange = (e) => {
+                    this.pageSize = parseInt(e.target.value);
+                    this.currentPage = 1;
+                    this.render();
+                };
+            }
+
+            this.render();
+        }
+
+        render() {
+            if (this.totalItems === 0) {
+                this.pagination.style.display = 'none';
+                return;
+            }
+            this.pagination.style.display = 'flex';
+
+            const totalPages = Math.ceil(this.totalItems / this.pageSize);
+            if (this.currentPage > totalPages) this.currentPage = totalPages;
+
+            const startIdx = (this.currentPage - 1) * this.pageSize;
+            const endIdx = Math.min(startIdx + this.pageSize, this.totalItems);
+
+            this.items.forEach((item, idx) => {
+                if (idx >= startIdx && idx < endIdx) {
+                    item[0].style.display = '';
+                    if (item.length > 1) {
+                        if (item[0].classList.contains('expanded')) {
+                            item[1].style.display = 'table-row';
+                        } else {
+                            item[1].style.display = 'none';
+                        }
+                    }
+                } else {
+                    item[0].style.display = 'none';
+                    if (item.length > 1) item[1].style.display = 'none';
+                }
+            });
+
+            this.pagination.querySelector('.page-start').textContent = startIdx + 1;
+            this.pagination.querySelector('.page-end').textContent = endIdx;
+            this.pagination.querySelector('.page-total').textContent = this.totalItems;
+
+            const controls = this.pagination.querySelector('.pagination-controls');
+            if (!controls) return;
+            controls.innerHTML = '';
+            if (totalPages > 1) {
+                const prev = document.createElement('button');
+                prev.className = 'editor-btn editor-btn-secondary';
+                prev.style.padding = '0.3rem 0.6rem';
+                prev.innerHTML = `
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"></path>
+                </svg>
+            `;
+                prev.disabled = this.currentPage === 1;
+                prev.onclick = () => { this.currentPage--; this.render(); };
+                controls.appendChild(prev);
+
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= this.currentPage - 1 && i <= this.currentPage + 1)) {
+                        const btn = document.createElement('button');
+                        btn.className = `editor-btn ${i === this.currentPage ? 'editor-btn-primary' : 'editor-btn-secondary'}`;
+                        btn.style.padding = '0.3rem 0.6rem';
+                        btn.textContent = i;
+                        btn.onclick = () => { this.currentPage = i; this.render(); };
+                        controls.appendChild(btn);
+                    } else if (i === this.currentPage - 2 || i === this.currentPage + 2) {
+                        const dots = document.createElement('span');
+                        dots.style.padding = '0 0.5rem';
+                        dots.style.color = 'var(--text-muted-custom)';
+                        dots.textContent = '...';
+                        controls.appendChild(dots);
+                    }
+                }
+
+                const next = document.createElement('button');
+                next.className = 'editor-btn editor-btn-secondary';
+                next.style.padding = '0.3rem 0.6rem';
+                next.innerHTML = `
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"></path>
+                </svg>
+            `;
+                next.disabled = this.currentPage === totalPages;
+                next.onclick = () => { this.currentPage++; this.render(); };
+                controls.appendChild(next);
+            }
+        }
+    }
+
+    let filePaginator = new TablePaginator('file-tbody', 'file-pagination', false);
+
+    async function refreshHistoryTable() {
+        try {
+            const url = window.location.href;
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const html = await res.text();
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            const newTbody = doc.getElementById('file-tbody');
+            const newCount = doc.getElementById('history-count');
+
+            if (newTbody) {
+                document.getElementById('file-tbody').innerHTML = newTbody.innerHTML;
+            }
+            if (newCount) {
+                const countBadge = document.getElementById('history-count');
+                if (countBadge) countBadge.textContent = newCount.textContent;
+            }
+
+            filePaginator.init(); // Re-initialize with new items
+        } catch (e) {
+            console.error("Failed to refresh history table", e);
+        }
+}
+
+    // DomContentLoaded Initialization lifecycle
+    window.addEventListener('DOMContentLoaded', () => {
+        initializeCodeMirror();
+
+        // Show empty state by default
+        showEmptyState();
+
+        // Restore initialization parameters if active
+        if (initWorker && initPath) {
+            currentWorkerName = initWorker;
+            currentFilePath = initPath;
+            
+            // Sync dropdown
+            workerFilter.value = initWorker;
+            // Load tree
+            fetchWorkerTypes(initWorker);
+            fetchWorkerFiles(initWorker);
+
+            const cleanName = initPath.substring(initPath.lastIndexOf('/') + 1);
+            editorInfo.innerHTML = `
+            <span>${initWorker}</span>
+            <span style="opacity: 0.4">/</span>
+            <span class="breadcrumb-node">${cleanName}</span>
+        `;
+            btnRefresh.disabled = false;
+            loadFileByPath(initWorker, initPath);
+        } else {
+            workerFilter.value = "all";
+            currentWorkerName = "all";
+            fetchWorkerTypes("all");
+            fetchWorkerFiles("all");
+        }
+
+        // ==========================================
+        // IN-EDITOR FIND WIDGET LOGIC
+        // ==========================================
+        const findWidget = document.getElementById('editor-find-widget');
+        const findInput = document.getElementById('editor-find-input');
+        const findCount = document.getElementById('find-count');
+        const btnFindToggle = document.getElementById('btn-find');
+        const btnFindNext = document.getElementById('btn-find-next');
+        const btnFindPrev = document.getElementById('btn-find-prev');
+        const btnFindClose = document.getElementById('btn-find-close');
+        const toggleCase = document.getElementById('find-case-toggle');
+        const toggleWord = document.getElementById('find-word-toggle');
+
+        let searchMarks = [];
+        let activeMatchIndex = -1;
+        let currentMatches = [];
+        let totalMatchesFound = 0;
+        let searchTimeout = null;
+
+        function clearSearchHighlights() {
+            searchMarks.forEach(m => m.clear());
+            searchMarks = [];
+            currentMatches = [];
+            activeMatchIndex = -1;
+            findCount.textContent = 'No results';
+        }
+
+        function executeSearch() {
+            if (!codeMirrorInstance) return;
+            clearSearchHighlights();
+
+            let query = findInput.value;
+            if (!query) return;
+
+            const isCaseSensitive = toggleCase.classList.contains('active');
+            const isWholeWord = toggleWord.classList.contains('active');
+
+            // Escape regex special chars if we are using regex for whole word
+            let regexStr = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            if (isWholeWord) {
+                regexStr = `\\b${regexStr}\\b`;
+            }
+
+            const searchOpt = (isWholeWord || !isCaseSensitive) ? new RegExp(regexStr, isCaseSensitive ? 'g' : 'gi') : query;
+            const cursor = codeMirrorInstance.getSearchCursor(searchOpt, null, !isCaseSensitive);
+
+            const MAX_MATCHES = 1000;
+            totalMatchesFound = 0;
+
+            while (cursor.findNext()) {
+                totalMatchesFound++;
+                if (currentMatches.length < MAX_MATCHES) {
+                    currentMatches.push({
+                        from: cursor.from(),
+                        to: cursor.to()
+                    });
+                    const mark = codeMirrorInstance.markText(cursor.from(), cursor.to(), {
+                        className: 'cm-search-match'
+                    });
+                    searchMarks.push(mark);
+                }
+            }
+
+            if (currentMatches.length > 0) {
+                activeMatchIndex = 0;
+                focusActiveMatch();
+            } else {
+                findCount.textContent = 'No results';
+            }
+        }
+
+        function focusActiveMatch() {
+            if (currentMatches.length === 0) return;
+
+            // Reset all classes
+            searchMarks.forEach(m => m.className = 'cm-search-match');
+
+            // Highlight active
+            const activeMark = searchMarks[activeMatchIndex];
+            // We have to recreate the mark to change its class in CodeMirror 5
+            const pos = currentMatches[activeMatchIndex];
+            activeMark.clear();
+            searchMarks[activeMatchIndex] = codeMirrorInstance.markText(pos.from, pos.to, {
+                className: 'cm-search-match cm-search-match-active'
+            });
+
+            // Scroll into view
+            codeMirrorInstance.scrollIntoView(pos, 100);
+            if (totalMatchesFound > currentMatches.length) {
+                findCount.textContent = `${activeMatchIndex + 1} of ${currentMatches.length}+`;
+            } else {
+                findCount.textContent = `${activeMatchIndex + 1} of ${totalMatchesFound}`;
+            }
+        }
+
+        function nextMatch() {
+            if (currentMatches.length === 0) return;
+            activeMatchIndex = (activeMatchIndex + 1) % currentMatches.length;
+            focusActiveMatch();
+        }
+
+        function prevMatch() {
+            if (currentMatches.length === 0) return;
+            activeMatchIndex = (activeMatchIndex - 1 + currentMatches.length) % currentMatches.length;
+            focusActiveMatch();
+        }
+
+        function toggleFindWidget() {
+            if (findWidget.style.display === 'flex') {
+                findWidget.style.display = 'none';
+                clearSearchHighlights();
+                if (codeMirrorInstance) codeMirrorInstance.focus();
+            } else {
+                findWidget.style.display = 'flex';
+                findInput.focus();
+                if (codeMirrorInstance && codeMirrorInstance.getSelection()) {
+                    findInput.value = codeMirrorInstance.getSelection();
+                }
+                findInput.select();
+                executeSearch();
+            }
+        }
+
+        function debouncedSearch() {
+            if (searchTimeout) clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(executeSearch, 250);
+        }
+
+        btnFindToggle.addEventListener('click', toggleFindWidget);
+        btnFindClose.addEventListener('click', toggleFindWidget);
+
+        findInput.addEventListener('input', debouncedSearch);
+
+        findInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) prevMatch();
+                else nextMatch();
+            } else if (e.key === 'Escape') {
+                toggleFindWidget();
+            }
+        });
+
+        btnFindNext.addEventListener('click', nextMatch);
+        btnFindPrev.addEventListener('click', prevMatch);
+
+        toggleCase.addEventListener('click', () => {
+            toggleCase.classList.toggle('active');
+            executeSearch();
+            findInput.focus();
+        });
+
+        toggleWord.addEventListener('click', () => {
+            toggleWord.classList.toggle('active');
+            executeSearch();
+            findInput.focus();
+        });
+
+        // Global Ctrl+F / Ctrl+S listeners
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                // Only capture if we are on the editor page and have a file open
+                if (codeMirrorInstance && document.querySelector('.editor-main').contains(e.target) || e.target === document.body) {
+                    e.preventDefault();
+                    if (findWidget.style.display !== 'flex') {
+                        toggleFindWidget();
+                    } else {
+                        findInput.focus();
+                        findInput.select();
+                    }
+                }
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                if (!canEditCurrentFile) {
+                    displayToast('View only — Edit File permission required to save', false);
+                    return;
+                }
+                if (btnSave && !btnSave.disabled) btnSave.click();
+            }
+        });
+    });
+</script>
+{% endblock %}

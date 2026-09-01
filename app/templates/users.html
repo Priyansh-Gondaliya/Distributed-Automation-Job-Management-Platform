@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Users · AutoControl{% endblock %}
+{% block page_title %}User Management{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/users.css') }}">
+
+{% set ns = namespace(admins=0, active=0, disabled=0) %}
+{% for u in users %}
+  {% if u.role == 'admin' %}{% set ns.admins = ns.admins + 1 %}{% endif %}
+  {% if u.is_disabled %}{% set ns.disabled = ns.disabled + 1 %}{% else %}{% set ns.active = ns.active + 1 %}{% endif %}
+{% endfor %}
+
+<div class="users-page">
+    <div class="users-hero">
+        <div>
+            <p class="users-kicker">Administration</p>
+            <h2>Users</h2>
+            <p class="users-lede">
+                Create accounts, promote users to admin, and disable access when needed.
+                Admin accounts cannot be demoted. Use Disable to revoke access.
+            </p>
+        </div>
+        <div class="users-stats" aria-hidden="true">
+            <div class="users-stat"><b>{{ users|length }}</b><span>Total</span></div>
+            <div class="users-stat is-admin"><b>{{ ns.admins }}</b><span>Admins</span></div>
+            <div class="users-stat is-active"><b>{{ ns.active }}</b><span>Active</span></div>
+            <div class="users-stat is-disabled"><b>{{ ns.disabled }}</b><span>Disabled</span></div>
+        </div>
+    </div>
+
+    <div class="users-panel">
+        <div class="users-toolbar">
+            <div class="users-toolbar-left">
+                <div class="users-search">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <path d="M21 21l-3.5-3.5"></path>
+                    </svg>
+                    <input type="search" id="users-search" placeholder="Search by username or IP…" autocomplete="off">
+                </div>
+                <select id="users-filter-role" class="users-filter" aria-label="Filter by role">
+                    <option value="all">All roles</option>
+                    <option value="admin">Admins</option>
+                    <option value="user">Users</option>
+                </select>
+                <select id="users-filter-status" class="users-filter" aria-label="Filter by status">
+                    <option value="all">All status</option>
+                    <option value="active">Active</option>
+                    <option value="disabled">Disabled</option>
+                </select>
+            </div>
+            <button type="button" class="users-btn users-btn-primary" id="users-open-create">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"></path>
+                </svg>
+                New user
+            </button>
+        </div>
+
+        <div class="users-table-wrap">
+            <table class="users-table" id="users-table">
+                <thead>
+                    <tr>
+                        <th style="width: 64px;">ID</th>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Registered IP</th>
+                        <th>Last login IP</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    {% set is_disabled = user.is_disabled|default(0)|int == 1 %}
+                    {% set is_admin = user.role == 'admin' %}
+                    {% set is_primary = user.username == 'admin' %}
+                    {% set is_self = user.id == current_user.id %}
+                    <tr class="users-row {% if is_disabled %}is-disabled-row{% endif %}"
+                        data-role="{{ user.role }}"
+                        data-status="{{ 'disabled' if is_disabled else 'active' }}"
+                        data-search="{{ user.username }} {{ user.registered_ip or '' }} {{ user.last_login_ip or '' }} #{{ user.id }}">
+                        <td class="users-id">#{{ user.id }}</td>
+                        <td>
+                            <div class="users-identity">
+                                <div class="users-avatar {% if is_admin %}is-admin{% endif %}">{{ (user.username)[0]|upper }}</div>
+                                <div style="min-width:0;">
+                                    <div class="users-name">{{ user.username }}</div>
+                                    <div class="users-sub">
+                                        {% if is_self %}You · {% endif %}
+                                        {% if is_primary %}Primary admin{% elif is_admin %}Administrator{% else %}Standard user{% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="users-badge {% if is_admin %}users-badge-admin{% else %}users-badge-user{% endif %}">
+                                {{ user.role }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if is_disabled %}
+                            <span class="users-badge users-badge-disabled">Disabled</span>
+                            {% else %}
+                            <span class="users-badge users-badge-active">Active</span>
+                            {% endif %}
+                        </td>
+                        <td class="users-mono">{{ user.registered_ip or '—' }}</td>
+                        <td class="users-mono">{{ user.last_login_ip or 'Never' }}</td>
+                        <td>
+                            <div class="users-actions">
+                                <button type="button"
+                                    class="users-btn users-btn-ghost users-btn-sm js-edit-user"
+                                    title="Edit user"
+                                    data-user-id="{{ user.id }}"
+                                    data-username="{{ user.username|e }}"
+                                    data-ip="{{ (user.registered_ip or '')|e }}"
+                                    data-role="{{ user.role }}"
+                                    data-disabled="{{ 1 if is_disabled else 0 }}"
+                                    data-primary="{{ 1 if is_primary else 0 }}"
+                                    data-self="{{ 1 if is_self else 0 }}">
+                                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                    Edit
+                                </button>
+
+                                {% if not is_primary and not is_self %}
+                                <form action="{{ url_for('web.toggle_user_disabled', user_id=user.id) }}" method="post" style="margin:0;">
+                                    <button type="submit"
+                                        class="users-btn users-btn-ghost users-btn-sm {% if is_disabled %}users-btn-enable{% else %}users-btn-disable{% endif %}"
+                                        title="{{ 'Enable account' if is_disabled else 'Disable account' }}">
+                                        {% if is_disabled %}
+                                        Enable
+                                        {% else %}
+                                        Disable
+                                        {% endif %}
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7">
+                            <div class="users-empty">
+                                <strong>No users yet</strong>
+                                Create the first account to get started.
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="users-empty" id="users-filter-empty" style="display:none;">
+            <strong>No matches</strong>
+            Try a different search or filter.
+        </div>
+
+        {% if users %}
+        <div class="users-footer-note">
+            Showing <span id="users-visible-count">{{ users|length }}</span> of {{ users|length }} users.
+            Promote carefully — admin role cannot be reversed.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# Create drawer #}
+<div class="users-overlay" id="users-create-overlay" aria-hidden="true">
+    <div class="users-drawer" role="dialog" aria-labelledby="users-create-title">
+        <div class="users-drawer-head">
+            <div>
+                <h3 id="users-create-title">New user</h3>
+                <p>Set credentials, optional registered IP, and starting role.</p>
+            </div>
+            <button type="button" class="users-drawer-close" data-close-create aria-label="Close">✕</button>
+        </div>
+        <form action="{{ url_for('web.create_user') }}" method="post" style="display:flex; flex-direction:column; height:100%; min-height:0;">
+            <div class="users-drawer-body">
+                <div class="users-field">
+                    <label for="create-username">Username</label>
+                    <input type="text" id="create-username" name="username" required placeholder="login_name" autocomplete="off">
+                </div>
+                <div class="users-field">
+                    <label for="create-password">Password</label>
+                    <input type="password" id="create-password" name="password" required placeholder="••••••••" autocomplete="new-password">
+                </div>
+                <div class="users-field">
+                    <label for="create-ip">Registered IP</label>
+                    <input type="text" id="create-ip" name="registered_ip" placeholder="e.g. 192.168.1.5">
+                    <div class="users-hint">Non-admins must sign in from this IP. Leave blank to use a placeholder.</div>
+                </div>
+                <div class="users-field">
+                    <label for="create-role">Role</label>
+                    <select id="create-role" name="role">
+                        <option value="user" selected>User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <div class="users-hint">Admins get full platform access immediately.</div>
+                </div>
+            </div>
+            <div class="users-drawer-foot">
+                <button type="button" class="users-btn users-btn-ghost" data-close-create>Cancel</button>
+                <button type="submit" class="users-btn users-btn-primary">Create user</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Edit drawer #}
+<div class="users-overlay" id="users-edit-overlay" aria-hidden="true">
+    <div class="users-drawer" role="dialog" aria-labelledby="users-edit-title">
+        <div class="users-drawer-head">
+            <div>
+                <h3 id="users-edit-title">Edit user</h3>
+                <p>Update profile details. Password is optional.</p>
+            </div>
+            <button type="button" class="users-drawer-close" data-close-edit aria-label="Close">✕</button>
+        </div>
+        <form id="users-edit-form" action="#" method="post" style="display:flex; flex-direction:column; height:100%; min-height:0;">
+            <div class="users-drawer-body">
+                <div class="users-field">
+                    <label for="edit-username">Username</label>
+                    <input type="text" id="edit-username" name="username" required autocomplete="off">
+                </div>
+                <div class="users-field">
+                    <label for="edit-ip">Registered IP</label>
+                    <input type="text" id="edit-ip" name="registered_ip" placeholder="e.g. 192.168.1.5">
+                </div>
+
+                <div class="users-field" id="edit-role-select-wrap">
+                    <label for="edit-role">Role</label>
+                    <select id="edit-role">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <div class="users-hint">Promoting to Admin grants full rights and cannot be reversed.</div>
+                </div>
+                <div class="users-field" id="edit-role-locked-wrap" style="display:none;">
+                    <label>Role</label>
+                    <input type="text" id="edit-role-locked-display" value="Admin" disabled>
+                    <div class="users-hint">Admin cannot be changed back to User.</div>
+                </div>
+                <input type="hidden" name="role" id="edit-role-value" value="user">
+
+                <div id="edit-disable-wrap">
+                    <label class="users-check">
+                        <input type="checkbox" name="is_disabled" id="edit-is-disabled" value="1">
+                        <span>
+                            Disable account
+                            <small>Blocked from signing in with username and password.</small>
+                        </span>
+                    </label>
+                </div>
+                <p class="users-hint" id="edit-disable-note" style="display:none; margin:0;"></p>
+
+                <div class="users-field">
+                    <label for="edit-password">New password</label>
+                    <input type="password" id="edit-password" name="password" placeholder="Leave blank to keep current" autocomplete="new-password">
+                </div>
+            </div>
+            <div class="users-drawer-foot">
+                <button type="button" class="users-btn users-btn-ghost" data-close-edit>Cancel</button>
+                <button type="submit" class="users-btn users-btn-primary">Save changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/users.js') }}"></script>
+{% endblock %}

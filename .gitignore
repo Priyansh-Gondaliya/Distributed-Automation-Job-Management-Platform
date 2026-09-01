@@ -1,0 +1,13 @@
+# Local secrets — do not commit
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+
+# Legacy SQLite (removed — app is Postgres-only)
+automation.db
+automation.db-*
+*.db-wal
+*.db-shm
+postgres/sqlite_archive_*/

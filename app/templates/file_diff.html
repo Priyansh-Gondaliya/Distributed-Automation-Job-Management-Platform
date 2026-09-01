@@ -1,0 +1,632 @@
+{% extends "base.html" %}
+
+{% block title %}File Diff · AutoControl{% endblock %}
+{% block page_title %}File Changes{% endblock %}
+
+{% block content %}
+<!-- Include Highlight.js for professional syntax highlighting -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+<style>
+    /* Professional System Design Variables */
+    :root {
+        /* Base Dark Theme (Default) */
+        --bg-body: #0d1117;
+        --bg-surface: #161b22;
+        --bg-surface-hover: #21262d;
+        --border-subtle: #30363d;
+        --border-strong: #484f58;
+        
+        --text-primary: #e6edf3;
+        --text-secondary: #8b949e;
+        --text-muted: #6e7681;
+        
+        --accent-color: #2f81f7;
+        
+        /* Diff Specific Colors */
+        --diff-add-bg: rgba(46, 160, 67, 0.15);
+        --diff-add-gutter: rgba(46, 160, 67, 0.2);
+        --diff-add-text: #3fb950;
+        
+        --diff-del-bg: rgba(248, 81, 73, 0.15);
+        --diff-del-gutter: rgba(248, 81, 73, 0.2);
+        --diff-del-text: #f85149;
+        
+        --gutter-bg: #161b22;
+
+        /* VS Code Dark Style Syntax Colors */
+        --syn-comment: #8b949e;
+        --syn-keyword: #ff7b72;
+        --syn-string: #a5d6ff;
+        --syn-number: #79c0ff;
+        --syn-function: #d2a8ff;
+        --syn-attr: #ffa657;
+        --syn-builtin: #79c0ff;
+        --syn-tag: #7ee787;
+        --syn-property: #79c0ff;
+        
+        /* Typography */
+        --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+        --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    }
+
+    html.light-theme {
+        --bg-body: #f6f8fa;
+        --bg-surface: #ffffff;
+        --bg-surface-hover: #f3f4f6;
+        --border-subtle: #d0d7de;
+        --border-strong: #afb8c1;
+        
+        --text-primary: #1f2328;
+        --text-secondary: #656d76;
+        --text-muted: #8c959f;
+        
+        --accent-color: #0969da;
+        
+        --diff-add-bg: #e6ffec;
+        --diff-add-gutter: #ccffd8;
+        --diff-add-text: #1a7f37;
+        
+        --diff-del-bg: #ffebe9;
+        --diff-del-gutter: #ffdce0;
+        --diff-del-text: #cf222e;
+        
+        --gutter-bg: #f6f8fa;
+
+        /* VS Code / Github Light Style Syntax Colors */
+        --syn-comment: #6a737d;
+        --syn-keyword: #cf222e;
+        --syn-string: #0a3069;
+        --syn-number: #0550ae;
+        --syn-function: #8250df;
+        --syn-attr: #953800;
+        --syn-builtin: #0550ae;
+        --syn-tag: #116329;
+        --syn-property: #0550ae;
+    }
+
+    .diff-wrapper {
+        font-family: var(--font-sans);
+        color: var(--text-primary);
+        max-width: 1600px;
+        margin: 0 auto;
+        padding-bottom: 2rem;
+    }
+
+    /* Header Section */
+    .diff-header {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    .diff-header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .file-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .file-icon {
+        color: var(--text-secondary);
+    }
+
+    .file-path {
+        font-family: var(--font-mono);
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        word-break: break-all;
+    }
+
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .btn-back:hover {
+        background: var(--bg-surface-hover);
+        border-color: var(--border-strong);
+    }
+
+    /* Meta & Stats Row */
+    .diff-header-bottom {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+        gap: 1.5rem;
+        background: var(--bg-body);
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }
+
+    .meta-details {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        font-size: 0.875rem;
+    }
+
+    .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+    }
+
+    .meta-item svg {
+        color: var(--text-muted);
+    }
+
+    .meta-value {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .stats-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+    }
+
+    .stat-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.6rem;
+        border-radius: 2rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+    }
+
+    .stat-badge.additions {
+        color: var(--diff-add-text);
+        background: var(--diff-add-bg);
+        border-color: var(--diff-add-gutter);
+    }
+
+    .stat-badge.deletions {
+        color: var(--diff-del-text);
+        background: var(--diff-del-bg);
+        border-color: var(--diff-del-gutter);
+    }
+
+    .stat-badge.total {
+        color: var(--text-secondary);
+        background: var(--bg-surface);
+        border-color: var(--border-subtle);
+    }
+
+    /* Diff Viewer Layout */
+    .diff-split-container {
+        display: flex;
+        gap: 1rem;
+        border-radius: 8px;
+    }
+
+    .diff-pane {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    .diff-pane-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: var(--gutter-bg);
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .diff-pane-content {
+        display: flex;
+        position: relative;
+        height: 65vh;
+        min-height: 400px;
+    }
+
+    /* Code Container & Table */
+    .diff-editor {
+        flex: 1;
+        overflow: auto;
+        background: var(--bg-surface);
+    }
+    
+    .diff-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        tab-size: 4;
+    }
+
+    .diff-row {
+        display: table-row;
+    }
+
+    .diff-row:hover .diff-cell-content {
+        background: rgba(128, 128, 128, 0.05);
+    }
+
+    .diff-cell-gutter {
+        display: table-cell;
+        width: 40px;
+        min-width: 40px;
+        text-align: right;
+        padding: 0 0.75rem 0 0.5rem;
+        color: var(--text-muted);
+        background: var(--gutter-bg);
+        border-right: 1px solid var(--border-subtle);
+        user-select: none;
+        vertical-align: top;
+    }
+
+    .diff-cell-content {
+        display: table-cell;
+        padding: 0 1rem;
+        white-space: pre;
+        color: var(--text-primary);
+        vertical-align: top;
+        word-break: normal;
+    }
+
+    /* Line States */
+    .diff-row.added .diff-cell-content {
+        background-color: var(--diff-add-bg);
+    }
+    .diff-row.added .diff-cell-gutter {
+        background-color: var(--diff-add-gutter);
+        color: var(--diff-add-text);
+    }
+
+    .diff-row.removed .diff-cell-content {
+        background-color: var(--diff-del-bg);
+    }
+    .diff-row.removed .diff-cell-gutter {
+        background-color: var(--diff-del-gutter);
+        color: var(--diff-del-text);
+    }
+
+    /* VS Code CSS Syntax Mapping */
+    .hljs-comment, .hljs-quote { color: var(--syn-comment); font-style: italic; }
+    .hljs-keyword, .hljs-selector-tag, .hljs-type, .hljs-section { color: var(--syn-keyword); font-weight: 600; }
+    .hljs-string, .hljs-meta .hljs-string { color: var(--syn-string); }
+    .hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: var(--syn-number); }
+    .hljs-function, .hljs-title { color: var(--syn-function); }
+    .hljs-params { color: var(--text-primary); }
+    .hljs-attr, .hljs-variable, .hljs-template-variable { color: var(--syn-attr); }
+    .hljs-built_in, .hljs-class .hljs-title { color: var(--syn-builtin); }
+    .hljs-tag, .hljs-name { color: var(--syn-tag); }
+    .hljs-attribute { color: var(--syn-property); }
+
+    /* Minimap / Scroll Marker Track */
+    .diff-minimap {
+        width: 12px;
+        background: var(--gutter-bg);
+        border-left: 1px solid var(--border-subtle);
+        position: relative;
+        cursor: pointer;
+        z-index: 10;
+    }
+
+    .diff-minimap:hover {
+        background: var(--bg-surface-hover);
+    }
+
+    .minimap-marker {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 3px;
+        opacity: 0.8;
+        transition: transform 0.1s ease, opacity 0.1s ease;
+    }
+
+    .minimap-marker:hover {
+        transform: scaleY(2.5);
+        opacity: 1;
+        z-index: 5;
+    }
+
+    .marker-added { background-color: var(--diff-add-text); }
+    .marker-removed { background-color: var(--diff-del-text); }
+
+    /* Custom Scrollbar */
+    .diff-editor::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+    .diff-editor::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .diff-editor::-webkit-scrollbar-thumb {
+        background: var(--border-subtle);
+        border: 3px solid var(--bg-surface);
+        border-radius: 6px;
+    }
+    .diff-editor::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
+    }
+
+    @media (max-width: 1024px) {
+        .diff-split-container {
+            flex-direction: column;
+        }
+        .diff-pane-content {
+            height: 50vh;
+        }
+        .meta-details {
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+    }
+</style>
+
+<div class="diff-wrapper">
+    <!-- Header -->
+    <header class="diff-header">
+        <div class="diff-header-top">
+            <div class="file-info">
+                <svg class="file-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <h2 class="file-path">{{ record.file_path }}</h2>
+            </div>
+            <a href="{{ back_url }}" class="btn-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                {{ back_label }}
+            </a>
+        </div>
+        
+        <div class="diff-header-bottom">
+            <div class="meta-details">
+                <div class="meta-item" title="Worker">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                    <span class="meta-value">{{ record.worker_name }}</span>
+                </div>
+                <div class="meta-item" title="User / Modifier">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span class="meta-value">{{ record.username or 'System' }}</span>
+                </div>
+                <div class="meta-item" title="Timestamp">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span class="meta-value">{{ record.created_at }}</span>
+                </div>
+            </div>
+
+            <div class="stats-group">
+                <span class="stat-badge additions" title="Lines Added">
+                    +{{ additions }}
+                </span>
+                <span class="stat-badge deletions" title="Lines Removed">
+                    -{{ deletions }}
+                </span>
+                <span class="stat-badge total" title="Total Changes">
+                    {{ additions + deletions }} lines changed
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Split Diff View -->
+    <div class="diff-split-container">
+        
+        <!-- Old Version Pane -->
+        <div class="diff-pane">
+            <div class="diff-pane-header">
+                <span>Original</span>
+            </div>
+            <div class="diff-pane-content">
+                <div class="diff-editor" id="old-editor">
+                    <div class="diff-table">
+                        {% for line in old_view %}
+                        <div class="diff-row {% if line.type == 'added' %}added{% elif line.type == 'removed' %}removed{% endif %}">
+                            <div class="diff-cell-gutter">{{ loop.index }}</div>
+                            <div class="diff-cell-content">{{ line.text or ' ' }}</div>
+                        </div>
+                        {% else %}
+                        <div class="diff-row">
+                            <div class="diff-cell-gutter"></div>
+                            <div class="diff-cell-content" style="color: var(--text-muted); font-style: italic;">File was empty or did not exist.</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="diff-minimap" id="old-minimap" title="Click to scroll to change"></div>
+            </div>
+        </div>
+
+        <!-- New Version Pane -->
+        <div class="diff-pane">
+            <div class="diff-pane-header">
+                <span>Modified</span>
+            </div>
+            <div class="diff-pane-content">
+                <div class="diff-editor" id="new-editor">
+                    <div class="diff-table">
+                        {% for line in new_view %}
+                        <div class="diff-row {% if line.type == 'added' %}added{% elif line.type == 'removed' %}removed{% endif %}">
+                            <div class="diff-cell-gutter">{{ loop.index }}</div>
+                            <div class="diff-cell-content">{{ line.text or ' ' }}</div>
+                        </div>
+                        {% else %}
+                        <div class="diff-row">
+                            <div class="diff-cell-gutter"></div>
+                            <div class="diff-cell-content" style="color: var(--text-muted); font-style: italic;">File is empty.</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="diff-minimap" id="new-minimap" title="Click to scroll to change"></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Dynamic Language Detection based on File Path
+        const filePath = "{{ record.file_path }}";
+        const fileExtension = filePath.substring(filePath.lastIndexOf('.') + 1).toLowerCase();
+
+        // Map extensions to highlight.js names
+        const extensionMap = {
+            'js': 'javascript', 'jsx': 'javascript',
+            'ts': 'typescript', 'tsx': 'typescript',
+            'py': 'python', 'html': 'xml', 'xml': 'xml',
+            'css': 'css', 'json': 'json', 'md': 'markdown',
+            'yaml': 'yaml', 'yml': 'yaml', 'sh': 'bash',
+            'bash': 'bash', 'sql': 'sql', 'cpp': 'cpp',
+            'c': 'c', 'cs': 'csharp', 'go': 'go', 'rs': 'rust',
+            'java': 'java', 'php': 'php', 'rb': 'ruby',
+            'ini': 'ini', 'toml': 'toml'
+        };
+        const detectedLang = extensionMap[fileExtension] || null;
+
+        // Apply syntax coloring to each code row
+        document.querySelectorAll('.diff-cell-content').forEach(cell => {
+            const rawText = cell.textContent;
+            // Check if there is actual content to format
+            if (!rawText.trim() || rawText.includes("empty or did not exist") || rawText.includes("File is empty")) {
+                return;
+            }
+
+            try {
+                let highlighted;
+                if (detectedLang && typeof hljs !== 'undefined') {
+                    highlighted = hljs.highlight(rawText, { language: detectedLang, ignoreIllegals: true }).value;
+                } else if (typeof hljs !== 'undefined') {
+                    highlighted = hljs.highlightAuto(rawText).value;
+                }
+                if (highlighted) {
+                    cell.innerHTML = highlighted;
+                }
+            } catch (e) {
+                // Keep original text fallback if highlighting fails
+            }
+        });
+
+        // Setup Editors & Minimaps
+        const panes = [
+            { editor: 'old-editor', minimap: 'old-minimap' },
+            { editor: 'new-editor', minimap: 'new-minimap' }
+        ];
+
+        panes.forEach(pane => {
+            const editor = document.getElementById(pane.editor);
+            const minimap = document.getElementById(pane.minimap);
+            if (!editor || !minimap) return;
+
+            const table = editor.querySelector('.diff-table');
+            if (!table) return;
+
+            function renderMinimap() {
+                minimap.innerHTML = '';
+                const rows = table.querySelectorAll('.diff-row');
+                const totalHeight = table.scrollHeight;
+                
+                if (totalHeight === 0 || rows.length === 0) return;
+
+                const fragment = document.createDocumentFragment();
+
+                rows.forEach((row, index) => {
+                    const isAdded = row.classList.contains('added');
+                    const isRemoved = row.classList.contains('removed');
+
+                    if (isAdded || isRemoved) {
+                        const rowTop = row.offsetTop;
+                        const percent = (rowTop / totalHeight) * 100;
+
+                        const marker = document.createElement('div');
+                        marker.className = `minimap-marker ${isAdded ? 'marker-added' : 'marker-removed'}`;
+                        marker.style.top = `${percent}%`;
+                        marker.title = `Line ${index + 1} - Click to jump`;
+
+                        marker.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            editor.scrollTo({
+                                top: rowTop - (editor.clientHeight / 3), // Scroll to 1/3 down the screen for context
+                                behavior: 'smooth'
+                            });
+                        });
+
+                        fragment.appendChild(marker);
+                    }
+                });
+                
+                minimap.appendChild(fragment);
+            }
+
+            // Click minimap background to scroll
+            minimap.addEventListener('click', (e) => {
+                const rect = minimap.getBoundingClientRect();
+                const clickY = e.clientY - rect.top;
+                const percent = clickY / rect.height;
+                editor.scrollTo({
+                    top: (percent * table.scrollHeight) - (editor.clientHeight / 2),
+                    behavior: 'smooth'
+                });
+            });
+
+            // Initial render and resize observer for accuracy
+            renderMinimap();
+            
+            // Re-render minimap if container size changes significantly
+            const resizeObserver = new ResizeObserver(() => {
+                requestAnimationFrame(renderMinimap);
+            });
+            resizeObserver.observe(editor);
+        });
+    });
+</script>
+{% endblock %}

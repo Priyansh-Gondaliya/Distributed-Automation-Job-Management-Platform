@@ -1,0 +1,448 @@
+/* Home dashboard — scoped under .home-dash so other pages stay unchanged */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+.home-dash {
+    --home-font: "IBM Plex Sans", system-ui, sans-serif;
+    --home-display: "Plus Jakarta Sans", system-ui, sans-serif;
+    --home-accent: #0d9488;
+    --home-accent-soft: rgba(13, 148, 136, 0.12);
+    --home-line: var(--border);
+    font-family: var(--home-font);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.home-dash h2,
+.home-dash .home-panel-title {
+    font-family: var(--home-display);
+    font-weight: 650;
+    letter-spacing: -0.02em;
+}
+
+/* ---- Stats ---- */
+.home-dash .home-stats {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.home-dash .home-stat {
+    background: var(--surface);
+    border: 1px solid var(--home-line);
+    border-radius: 14px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.home-dash .home-stat:hover {
+    border-color: var(--border-highlight);
+    transform: translateY(-1px);
+}
+
+.home-dash .home-stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.home-dash .home-stat-value {
+    font-family: var(--home-display);
+    font-size: 1.55rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--text);
+}
+
+.home-dash .home-stat-value.is-online { color: #10b981; }
+.home-dash .home-stat-value.is-run { color: #3b82f6; }
+.home-dash .home-stat-value.is-wait { color: #f59e0b; }
+.home-dash .home-stat-value.is-ok { color: #10b981; }
+.home-dash .home-stat-value.is-bad { color: #ef4444; }
+
+html.light-theme .home-dash .home-stat-value.is-online,
+html.light-theme .home-dash .home-stat-value.is-ok { color: #047857; }
+html.light-theme .home-dash .home-stat-value.is-run { color: #1d4ed8; }
+html.light-theme .home-dash .home-stat-value.is-wait { color: #b45309; }
+html.light-theme .home-dash .home-stat-value.is-bad { color: #b91c1c; }
+
+/* ---- Toolbar / filters ---- */
+.home-dash .home-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.75rem 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--home-line);
+    border-radius: 14px;
+}
+
+.home-dash .home-toolbar form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    margin: 0;
+}
+
+.home-dash .home-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.home-dash .home-field label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.home-dash .home-input,
+.home-dash .home-select {
+    height: 36px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 0 0.7rem;
+    font-size: 0.875rem;
+    min-width: 140px;
+}
+
+.home-dash .home-input:focus,
+.home-dash .home-select:focus {
+    outline: none;
+    border-color: var(--home-accent);
+    box-shadow: 0 0 0 3px var(--home-accent-soft);
+}
+
+.home-dash .home-search {
+    min-width: 200px;
+    flex: 1;
+}
+
+.home-dash .home-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* ---- Panels ---- */
+.home-dash .home-panel {
+    background: var(--surface);
+    border: 1px solid var(--home-line);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.home-dash .home-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid var(--home-line);
+}
+
+.home-dash .home-panel-title {
+    margin: 0;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.home-dash .home-panel-body {
+    padding: 0.75rem 1rem 1rem;
+}
+
+.home-dash .home-panel-body.flush {
+    padding: 0;
+}
+
+/* ---- Workers ---- */
+.home-dash .home-workers {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.65rem;
+}
+
+.home-dash .home-worker {
+    border: 1px solid var(--home-line);
+    border-radius: 12px;
+    padding: 0.85rem 0.95rem;
+    background: var(--surface-2);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.home-dash .home-worker:hover {
+    border-color: var(--border-highlight);
+    background: var(--surface-hover);
+}
+
+.home-dash .home-worker-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.home-dash .home-worker-name {
+    margin: 0;
+    font-family: var(--home-display);
+    font-size: 0.98rem;
+    font-weight: 650;
+}
+
+.home-dash .home-worker-name a {
+    color: var(--text);
+    text-decoration: none;
+}
+
+.home-dash .home-worker-name a:hover {
+    color: var(--home-accent);
+}
+
+.home-dash .home-worker-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.15rem 0.65rem;
+    margin: 0;
+    font-size: 0.78rem;
+}
+
+.home-dash .home-worker-meta dt {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.home-dash .home-worker-meta dd {
+    margin: 0;
+    color: var(--text);
+    word-break: break-all;
+}
+
+.home-dash .home-worker-actions {
+    margin-top: 0.15rem;
+}
+
+.home-dash .home-empty {
+    margin: 0;
+    padding: 1.5rem 0.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* ---- Tables ---- */
+.home-dash .home-table-wrap {
+    overflow-x: auto;
+}
+
+.home-dash .home-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+
+.home-dash .home-table thead th {
+    text-align: left;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 650;
+    border-bottom: 1px solid var(--home-line);
+    background: transparent;
+    white-space: nowrap;
+}
+
+.home-dash .home-table tbody td {
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--home-line);
+    vertical-align: middle;
+}
+
+.home-dash .home-table tbody tr:hover td {
+    background: rgba(13, 148, 136, 0.04);
+}
+
+html.light-theme .home-dash .home-table tbody tr:hover td {
+    background: rgba(13, 148, 136, 0.06);
+}
+
+.home-dash .home-table .script-name {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.home-dash .home-table .mono,
+.home-dash .home-table .mono-cell {
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.home-dash .days-input {
+    width: 64px;
+    height: 32px;
+    text-align: center;
+    padding: 0.2rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.home-dash .home-table .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.home-dash .home-table .inline-form {
+    display: inline;
+    margin: 0;
+}
+
+.home-dash .output-row td {
+    padding: 0 !important;
+    border-bottom: 1px solid var(--home-line);
+}
+
+.home-dash .job-output {
+    margin: 0;
+    padding: 0.9rem 1rem;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    overflow-x: auto;
+    max-height: 240px;
+    white-space: pre-wrap;
+}
+
+/* ---- Pagination ---- */
+.home-dash .home-pagination {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--home-line);
+}
+
+.home-dash .home-pagination-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.home-dash .home-pagination .pagination-info {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.home-dash .home-pagination .page-size-select {
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+}
+
+.home-dash .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.home-dash .pagination-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.home-dash .pagination-btn:hover:not(:disabled) {
+    border-color: var(--home-accent);
+    color: var(--home-accent);
+}
+
+.home-dash .pagination-btn.active {
+    background: var(--home-accent-soft);
+    border-color: var(--home-accent);
+    color: var(--home-accent);
+    font-weight: 650;
+}
+
+.home-dash .pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.home-dash .pagination-dots {
+    color: var(--text-muted);
+    padding: 0 0.2rem;
+}
+
+/* Accent primary button on home only */
+.home-dash .btn-home-primary {
+    background: var(--home-accent);
+    border-color: var(--home-accent);
+    color: #fff;
+}
+
+.home-dash .btn-home-primary:hover {
+    filter: brightness(1.05);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1100px) {
+    .home-dash .home-stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .home-dash .home-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .home-dash .home-search {
+        min-width: 100%;
+    }
+
+    .home-dash .home-toolbar {
+        align-items: stretch;
+    }
+
+    .home-dash .home-toolbar form,
+    .home-dash .home-toolbar-actions {
+        width: 100%;
+    }
+}

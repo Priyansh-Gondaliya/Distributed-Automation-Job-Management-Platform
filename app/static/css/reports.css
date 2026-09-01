@@ -1,0 +1,84 @@
+/* ==========================================================================
+   Reports & Analytics Dashboard Styles
+   ========================================================================== */
+
+/* Shared tokens / helpers from scheduler (no page-enter animations). */
+@import url("scheduler.css");
+
+/* ─── Reports Scope Overrides ─── */
+.reports-scope {
+    font-family: var(--font-sans);
+    color: var(--text-primary);
+}
+
+/* ─── Premium Adjustments for Analytics ─── */
+.reports-scope .kpi-card {
+    background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-base) 100%);
+    border-top: 2px solid transparent;
+    padding: 0.75rem 1rem;
+    gap: 0.2rem;
+    min-height: 0;
+}
+
+.reports-scope .kpi-grid {
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.reports-scope .kpi-value {
+    font-size: 1.45rem;
+    line-height: 1.15;
+}
+
+.reports-scope .kpi-label {
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+
+.reports-scope .kpi-icon {
+    width: 26px;
+    height: 26px;
+    padding: 4px;
+    margin-bottom: 0.15rem;
+}
+
+.reports-scope .kpi-sub {
+    font-size: 0.72rem;
+    line-height: 1.3;
+}
+
+.reports-scope .insights-kpi .kpi-card {
+    padding: 0.7rem 0.95rem;
+}
+
+.reports-scope .insights-kpi .kpi-value {
+    font-size: 1.35rem;
+}
+
+/* ─── Filter Bar Spacing ─── */
+.reports-scope .toolbar {
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
+}
+
+/* ─── Pagination Fixes ─── */
+.reports-scope .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.reports-scope .pagination-info {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.reports-scope .pagination-controls {
+    display: flex;
+    gap: 0.5rem;
+}

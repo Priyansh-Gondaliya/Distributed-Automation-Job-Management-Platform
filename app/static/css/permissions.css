@@ -1,0 +1,1190 @@
+/* Permissions / Access Control — scoped page styles */
+
+.permissions-page {
+    --perm-accent: #6366f1;
+    --perm-accent-hover: #4f46e5;
+    --perm-accent-soft: rgba(99, 102, 241, 0.14);
+    --perm-success: #10b981;
+    --perm-warning: #f59e0b;
+    --perm-danger: #f87171;
+    --perm-danger-hover: #ef4444;
+    --perm-surface: rgba(17, 24, 39, 0.72);
+    --perm-surface-solid: #111827;
+    --perm-sunken: rgba(2, 6, 23, 0.55);
+    --perm-hover: rgba(255, 255, 255, 0.04);
+    --perm-border: rgba(148, 163, 184, 0.14);
+    --perm-border-strong: rgba(148, 163, 184, 0.28);
+    --perm-text: #f1f5f9;
+    --perm-muted: #94a3b8;
+    --perm-radius: 14px;
+    --perm-radius-sm: 8px;
+    --perm-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+    --perm-focus: 0 0 0 3px rgba(99, 102, 241, 0.28);
+    --text-sub: var(--perm-muted);
+    --text-main: var(--perm-text);
+    --text-muted: var(--perm-muted);
+    --border-color: var(--perm-border);
+    --accent-warning: var(--perm-warning);
+    --fx-danger: var(--perm-danger);
+
+    color: var(--perm-text);
+    max-width: 1320px;
+    margin: 0 auto;
+    padding-bottom: 2.5rem;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+}
+
+html.light-theme .permissions-page {
+    --perm-accent: #4f46e5;
+    --perm-accent-hover: #4338ca;
+    --perm-accent-soft: rgba(79, 70, 229, 0.12);
+    --perm-success: #059669;
+    --perm-warning: #d97706;
+    --perm-danger: #dc2626;
+    --perm-danger-hover: #b91c1c;
+    --perm-surface: rgba(255, 255, 255, 0.9);
+    --perm-surface-solid: #ffffff;
+    --perm-sunken: #f1f5f9;
+    --perm-hover: rgba(15, 23, 42, 0.04);
+    --perm-border: rgba(148, 163, 184, 0.28);
+    --perm-border-strong: rgba(100, 116, 139, 0.35);
+    --perm-text: #0f172a;
+    --perm-muted: #64748b;
+    --perm-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+    --perm-focus: 0 0 0 3px rgba(79, 70, 229, 0.22);
+}
+
+.permissions-page *,
+.permissions-page *::before,
+.permissions-page *::after {
+    box-sizing: border-box;
+}
+
+.permissions-page ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.permissions-page ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.permissions-page ::-webkit-scrollbar-thumb {
+    background: var(--perm-border-strong);
+    border-radius: 99px;
+}
+
+/* Hero */
+.perm-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.perm-kicker {
+    margin: 0 0 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--perm-accent);
+}
+
+.perm-hero h2 {
+    margin: 0;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--perm-text);
+}
+
+.perm-lede {
+    margin: 0.4rem 0 0;
+    max-width: 42rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--perm-muted);
+}
+
+.perm-stats {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.perm-stat {
+    min-width: 88px;
+    padding: 0.65rem 0.85rem;
+    background: var(--perm-surface);
+    border: 1px solid var(--perm-border);
+    border-radius: 12px;
+    box-shadow: var(--perm-shadow);
+}
+
+.perm-stat b {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+}
+
+.perm-stat span {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--perm-muted);
+}
+
+/* Tabs */
+.permissions-page .tabs-wrapper {
+    margin-bottom: 1.15rem;
+}
+
+.permissions-page .tabs-list {
+    display: inline-flex;
+    gap: 0.3rem;
+    padding: 0.28rem;
+    background: var(--perm-sunken);
+    border: 1px solid var(--perm-border);
+    border-radius: 12px;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+.permissions-page .tab-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: transparent;
+    border: none;
+    border-radius: 9px;
+    padding: 0.55rem 0.95rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--perm-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.permissions-page .tab-trigger svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.permissions-page .tab-trigger:hover {
+    color: var(--perm-text);
+    background: var(--perm-hover);
+}
+
+.permissions-page .tab-trigger.active {
+    color: var(--perm-text);
+    background: var(--perm-surface-solid);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.permissions-page .tab-content {
+    animation: permFade 0.2s ease;
+}
+
+@keyframes permFade {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* Cards */
+.permissions-page .dashboard-card,
+.perm-card {
+    background: var(--perm-surface);
+    border: 1px solid var(--perm-border);
+    border-radius: var(--perm-radius);
+    box-shadow: var(--perm-shadow);
+    padding: 1.15rem 1.2rem 1.25rem;
+}
+
+.perm-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.perm-card-head h3,
+.permissions-page .sec-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--perm-text);
+}
+
+.permissions-page .sec-desc {
+    margin: 0.2rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--perm-muted);
+}
+
+.perm-count {
+    font-weight: 500;
+    color: var(--perm-muted);
+    font-size: 0.78rem;
+}
+
+.perm-section-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    background: var(--perm-accent-soft);
+    color: var(--perm-accent);
+    flex-shrink: 0;
+}
+
+.perm-section-icon svg {
+    width: 17px;
+    height: 17px;
+}
+
+.perm-card-title {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+}
+
+/* Forms */
+.permissions-page .form-group {
+    margin-bottom: 1rem;
+}
+
+.permissions-page .control-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--perm-muted);
+    margin-bottom: 0.4rem;
+}
+
+.permissions-page .field-input,
+.permissions-page .field-select {
+    width: 100%;
+    padding: 0.58rem 0.8rem;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--perm-text);
+    background: var(--perm-sunken);
+    border: 1px solid var(--perm-border);
+    border-radius: var(--perm-radius-sm);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.permissions-page .field-input:focus,
+.permissions-page .field-select:focus {
+    border-color: var(--perm-accent);
+    box-shadow: var(--perm-focus);
+    background: var(--perm-surface-solid);
+}
+
+.permissions-page .search-input-wrapper {
+    position: relative;
+    margin-bottom: 0.65rem;
+}
+
+.permissions-page .search-input-wrapper .field-input {
+    padding-left: 2.15rem;
+}
+
+.permissions-page .search-icon {
+    position: absolute;
+    left: 0.7rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--perm-muted);
+    pointer-events: none;
+    font-size: 0.82rem;
+}
+
+/* Sticky user bar */
+.perm-sticky-bar {
+    position: sticky;
+    top: 3.55rem;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) 1fr auto;
+    gap: 0.9rem 1.1rem;
+    align-items: end;
+    margin: -0.15rem 0 1.15rem;
+    padding: 0.85rem 1rem;
+    background: var(--perm-surface-solid);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--perm-border);
+    border-radius: var(--perm-radius);
+    box-shadow: var(--perm-shadow);
+}
+
+.perm-user-meta {
+    min-height: 2.4rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--perm-muted);
+    padding-bottom: 0.15rem;
+}
+
+.perm-user-meta strong {
+    color: var(--perm-text);
+    font-weight: 650;
+}
+
+.perm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-right: 0.45rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--perm-accent-soft);
+    color: var(--perm-accent);
+    border: 1px solid transparent;
+}
+
+.perm-chip.is-admin {
+    background: rgba(245, 158, 11, 0.16);
+    color: var(--perm-warning);
+}
+
+.perm-chip.is-user {
+    background: rgba(16, 185, 129, 0.14);
+    color: var(--perm-success);
+}
+
+#scheduler-view-users-admin-hint {
+    color: var(--perm-warning) !important;
+}
+
+.perm-is-admin .perm-grant-grid,
+.perm-is-admin .perm-card.is-grant {
+    opacity: 0.72;
+}
+
+/* Grant grid */
+.perm-grant-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+@media (min-width: 980px) {
+    .perm-grant-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .perm-card.is-wide {
+        grid-column: 1 / -1;
+    }
+}
+
+.permissions-page .grid-assign {
+    display: grid;
+}
+
+.permissions-page .grid-ownership {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+@media (min-width: 800px) {
+    .permissions-page .grid-ownership {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .permissions-page .grid-ownership .is-wide {
+        grid-column: 1 / -1;
+    }
+}
+
+/* Lists */
+.permissions-page .scrollable-list {
+    max-height: 380px;
+    overflow-y: auto;
+    border: 1px solid var(--perm-border);
+    border-radius: 10px;
+    background: var(--perm-sunken);
+    padding: 0.3rem;
+}
+
+.permissions-page .list-item {
+    padding: 0.65rem 0.7rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    margin-bottom: 0.2rem;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.permissions-page .perm-select-all {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.35rem 0 0.55rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--perm-muted, var(--text-sub, #94a3b8));
+    cursor: pointer;
+    user-select: none;
+}
+
+.permissions-page .perm-select-all:hover {
+    color: var(--perm-text, #e2e8f0);
+    background: var(--perm-hover, rgba(148, 163, 184, 0.08));
+}
+
+.permissions-page .perm-select-all input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--perm-accent, #6366f1);
+}
+
+.permissions-page .list-item:last-child {
+    margin-bottom: 0;
+}
+
+.permissions-page .list-item:hover {
+    background: var(--perm-hover);
+}
+
+.permissions-page .list-item:has(.item-checkbox:checked),
+.permissions-page .list-item:has(.scheduler-view-user-cb:checked) {
+    background: var(--perm-accent-soft);
+    border-color: rgba(99, 102, 241, 0.28);
+}
+
+.permissions-page .item-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    cursor: pointer;
+    font-weight: 550;
+    color: var(--perm-text);
+    font-size: 0.86rem;
+    line-height: 1.4;
+}
+
+.permissions-page .item-text {
+    word-break: break-word;
+}
+
+.permissions-page .item-checkbox,
+.permissions-page .scheduler-view-user-cb {
+    width: 1.05rem;
+    height: 1.05rem;
+    margin-top: 0.12rem;
+    flex-shrink: 0;
+    accent-color: var(--perm-accent);
+    cursor: pointer;
+}
+
+.permissions-page .sub-drawer {
+    margin-top: 0.7rem;
+    margin-left: 1.65rem;
+    padding: 0.75rem 0.8rem;
+    background: var(--perm-surface-solid);
+    border: 1px solid var(--perm-border);
+    border-radius: 10px;
+}
+
+/* —— Grant Schedule Access card only (scoped) —— */
+.permissions-page .perm-card.is-schedule-grant {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    border-color: rgba(99, 102, 241, 0.22);
+    background:
+        linear-gradient(165deg, rgba(99, 102, 241, 0.07) 0%, transparent 42%),
+        var(--perm-surface);
+}
+
+html.light-theme .permissions-page .perm-card.is-schedule-grant {
+    border-color: rgba(79, 70, 229, 0.18);
+    background:
+        linear-gradient(165deg, rgba(79, 70, 229, 0.06) 0%, transparent 42%),
+        var(--perm-surface);
+}
+
+.permissions-page .perm-card.is-schedule-grant .perm-card-head {
+    margin-bottom: 0;
+}
+
+.permissions-page .sch-toolbar {
+    display: flex;
+    align-items: stretch;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.permissions-page .sch-toolbar .sch-search {
+    flex: 1 1 220px;
+    margin: 0;
+}
+
+.permissions-page .sch-toolbar .sch-select-all {
+    flex: 0 0 auto;
+    margin: 0;
+    align-self: center;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--perm-border);
+    border-radius: 10px;
+    background: var(--perm-sunken);
+}
+
+.permissions-page .perm-card.is-schedule-grant .sch-list {
+    max-height: 420px;
+    padding: 0.45rem;
+    border-radius: 12px;
+}
+
+.permissions-page .schedule-actions-panel.sch-actions,
+.permissions-page .schedule-actions-panel {
+    margin-top: 0;
+    padding: 0.9rem 1rem;
+    background: var(--perm-surface-solid);
+    border: 1px solid rgba(99, 102, 241, 0.28);
+    border-radius: 12px;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.06);
+}
+
+.permissions-page .schedule-actions-panel[hidden] {
+    display: none !important;
+}
+
+.permissions-page .sch-actions-head {
+    margin-bottom: 0.65rem;
+}
+
+.permissions-page .sch-actions-hint {
+    margin: 0.2rem 0 0;
+    font-size: 0.76rem;
+    line-height: 1.4;
+}
+
+.permissions-page .sch-actions-pills {
+    margin-top: 0;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.permissions-page .schedule-granted-note {
+    margin: 0.35rem 0 0 1.65rem;
+    font-size: 0.78rem;
+    color: var(--perm-muted);
+    line-height: 1.35;
+}
+
+.permissions-page .schedule-granted-badge {
+    display: inline-block;
+    margin-right: 0.3rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #047857;
+    background: rgba(16, 185, 129, 0.16);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+html.light-theme .permissions-page .schedule-granted-badge {
+    color: #047857;
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.permissions-page .schedule-bulk-own {
+    margin-bottom: 0.45rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px dashed rgba(99, 102, 241, 0.4);
+    border-radius: 12px;
+    background: rgba(99, 102, 241, 0.06);
+}
+
+.permissions-page .schedule-owner-group {
+    margin-bottom: 0.4rem;
+    border: 1px solid var(--perm-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--perm-surface-solid);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.permissions-page .schedule-owner-group:hover {
+    border-color: var(--perm-border-strong);
+}
+
+.permissions-page .schedule-owner-group.has-grant {
+    border-color: rgba(16, 185, 129, 0.38);
+    box-shadow: inset 3px 0 0 rgba(16, 185, 129, 0.75);
+}
+
+.permissions-page .schedule-owner-group.is-expanded {
+    border-color: rgba(99, 102, 241, 0.35);
+}
+
+.permissions-page .schedule-owner-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 0;
+    background: transparent;
+    color: var(--perm-text);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+}
+
+.permissions-page .schedule-owner-toggle:hover {
+    background: var(--perm-hover);
+}
+
+.permissions-page .schedule-owner-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--perm-focus);
+}
+
+.permissions-page .schedule-owner-chevron {
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 8px;
+    color: var(--perm-muted);
+    background: var(--perm-sunken);
+    transition: transform 0.18s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.permissions-page .schedule-owner-chevron svg {
+    display: block;
+    transform: rotate(0deg);
+    transition: transform 0.18s ease;
+}
+
+.permissions-page .schedule-owner-group.is-expanded .schedule-owner-chevron {
+    color: var(--perm-accent);
+    background: var(--perm-accent-soft);
+}
+
+.permissions-page .schedule-owner-group.is-expanded .schedule-owner-chevron svg {
+    transform: rotate(90deg);
+}
+
+.permissions-page .schedule-owner-avatar {
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.02em;
+    color: var(--perm-accent);
+    background: var(--perm-accent-soft);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.permissions-page .schedule-owner-name {
+    font-weight: 650;
+    font-size: 0.9rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.permissions-page .schedule-owner-meta {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--perm-muted);
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--perm-sunken);
+}
+
+.permissions-page .schedule-owner-group.has-grant .schedule-owner-meta {
+    color: #059669;
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.permissions-page .schedule-owner-body {
+    padding: 0.35rem 0.45rem 0.5rem;
+    border-top: 1px solid var(--perm-border);
+    background: var(--perm-sunken);
+}
+
+.permissions-page .schedule-owner-body[hidden] {
+    display: none !important;
+}
+
+.permissions-page .schedule-in-group {
+    margin-bottom: 0.2rem;
+    border-radius: 10px;
+    background: var(--perm-surface-solid);
+    border: 1px solid transparent;
+}
+
+.permissions-page .schedule-in-group:hover {
+    border-color: var(--perm-border);
+}
+
+.permissions-page .schedule-in-group:has(.item-checkbox:checked) {
+    border-color: rgba(99, 102, 241, 0.35);
+    background: var(--perm-accent-soft);
+}
+
+@media (max-width: 720px) {
+    .permissions-page .sch-toolbar .sch-select-all {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+.permissions-page #folders-list.folders-list,
+.permissions-page .folders-list {
+    max-height: none;
+    min-height: 420px;
+    height: min(560px, 55vh);
+}
+
+.permissions-page .sub-drawer-title {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: var(--perm-muted);
+    margin-bottom: 0.4rem;
+}
+
+.perm-pill-block + .perm-pill-block {
+    margin-top: 0.7rem;
+}
+
+.permissions-page .pill-checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.permissions-page .pill-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 0.28rem 0.55rem;
+    background: var(--perm-sunken);
+    border: 1px solid var(--perm-border);
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--perm-text);
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.permissions-page .pill-checkbox:hover {
+    border-color: var(--perm-accent);
+    background: var(--perm-accent-soft);
+}
+
+.permissions-page .pill-checkbox:has(input:checked) {
+    border-color: var(--perm-accent);
+    background: var(--perm-accent-soft);
+    color: var(--perm-text);
+}
+
+.permissions-page .pill-checkbox.is-danger,
+.permissions-page .pill-checkbox:has(input[name$="_access_all_files"]) {
+    color: var(--perm-danger);
+}
+
+.permissions-page .field-hint {
+    display: block;
+    margin-top: 0.28rem;
+    color: var(--perm-muted);
+    font-size: 0.73rem;
+    line-height: 1.4;
+}
+
+/* Buttons */
+.permissions-page .btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.62rem 1.15rem;
+    font-size: 0.88rem;
+    font-weight: 650;
+    border-radius: 9px;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    cursor: pointer;
+    border: 1px solid transparent;
+    text-decoration: none;
+}
+
+.permissions-page .btn-action:active {
+    transform: translateY(1px);
+}
+
+.permissions-page .btn-block {
+    width: 100%;
+}
+
+.permissions-page .btn-solid-primary {
+    background: var(--perm-accent);
+    color: #fff !important;
+}
+
+.permissions-page .btn-solid-primary:hover {
+    background: var(--perm-accent-hover);
+}
+
+.permissions-page .btn-solid-primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.permissions-page .btn-outline-danger {
+    border-color: rgba(248, 113, 113, 0.45);
+    color: var(--perm-danger);
+    background: transparent;
+    padding: 0.32rem 0.7rem;
+    font-size: 0.78rem;
+}
+
+.permissions-page .btn-outline-danger:hover {
+    background: var(--perm-danger);
+    color: #111827;
+    border-color: var(--perm-danger);
+}
+
+.permissions-page .btn-solid-warning {
+    background: var(--perm-warning);
+    color: #111827 !important;
+}
+
+.permissions-page .btn-solid-warning:hover {
+    filter: brightness(1.05);
+}
+
+/* Tables */
+.permissions-page .table-container {
+    border: 1px solid var(--perm-border);
+    border-radius: 10px;
+    overflow: auto;
+    background: var(--perm-sunken);
+}
+
+.permissions-page .modern-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.86rem;
+}
+
+.permissions-page .modern-table th {
+    position: sticky;
+    top: 0;
+    background: var(--perm-surface-solid);
+    color: var(--perm-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--perm-border);
+}
+
+.permissions-page .modern-table td {
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid var(--perm-border);
+    color: var(--perm-text);
+    vertical-align: middle;
+}
+
+.permissions-page .modern-table tr:last-child td {
+    border-bottom: none;
+}
+
+.permissions-page .modern-table tbody tr:hover td {
+    background: var(--perm-hover);
+}
+
+.permissions-page .badge-modern {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.12rem 0.48rem;
+    font-size: 0.72rem;
+    font-weight: 650;
+    border-radius: 6px;
+    background: var(--perm-accent-soft);
+    color: var(--perm-text);
+    border: 1px solid var(--perm-border);
+}
+
+.permissions-page .empty-state {
+    text-align: center;
+    padding: 2.2rem 1.25rem !important;
+    color: var(--perm-muted);
+    font-size: 0.88rem;
+}
+
+.perm-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+}
+
+.perm-flag {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: var(--perm-sunken);
+    border: 1px solid var(--perm-border);
+    color: var(--perm-muted);
+}
+
+.perm-flag.on {
+    color: var(--perm-success);
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+/* Ownership steps */
+.perm-step {
+    display: flex;
+    gap: 0.55rem;
+    align-items: baseline;
+    margin-bottom: 0.35rem;
+}
+
+.perm-step-num {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    background: var(--perm-accent-soft);
+    color: var(--perm-accent);
+    flex-shrink: 0;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.perm-grants-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.85rem;
+}
+
+.perm-grants-toolbar .search-input-wrapper {
+    width: min(360px, 100%);
+    margin-bottom: 0;
+}
+
+/* Schedule Grants card */
+.schedule-grants-card {
+    padding: 1.15rem 0.85rem 0.75rem !important;
+}
+
+.schedule-grants-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0 0.35rem 0.7rem;
+}
+
+.schedule-grants-head .sec-desc {
+    margin-bottom: 0;
+}
+
+.schedule-grants-toolbar {
+    padding: 0 0.35rem 0.65rem;
+}
+
+.schedule-grants-toolbar .search-input-wrapper {
+    width: min(420px, 100%);
+    margin-bottom: 0;
+}
+
+.schedule-grants-table-wrap {
+    border: 1px solid var(--perm-border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--perm-sunken);
+}
+
+.schedule-grants-table-wrap .modern-table {
+    margin: 0;
+}
+
+.schedule-grants-table-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--perm-surface-solid);
+}
+
+.sg-user {
+    font-weight: 600;
+}
+
+.sg-schedule {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.sg-schedule-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.sg-script {
+    font-size: 0.88rem;
+    font-weight: 550;
+    color: var(--perm-text);
+    word-break: break-word;
+}
+
+.sg-schedule-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--perm-muted);
+}
+
+.sg-time {
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.perm-flag.danger.on {
+    color: var(--perm-danger);
+    border-color: rgba(248, 113, 113, 0.4);
+    background: rgba(248, 113, 113, 0.1);
+}
+
+.schedule-grants-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    padding: 0.35rem 0.25rem 0.15rem;
+}
+
+.schedule-grants-pagination .pagination-info {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    color: var(--perm-muted);
+}
+
+.schedule-grants-pagination .page-size-select {
+    width: auto;
+    min-width: 0;
+    padding: 0.28rem 0.5rem;
+    font-size: 0.8rem;
+    height: auto;
+}
+
+.schedule-grants-pagination .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.schedule-grants-pagination .pagination-btn {
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.45rem;
+    border-radius: 8px;
+    border: 1px solid var(--perm-border);
+    background: var(--perm-surface);
+    color: var(--perm-text);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.schedule-grants-pagination .pagination-btn:hover:not(:disabled) {
+    background: var(--perm-hover);
+    border-color: var(--perm-border-strong);
+}
+
+.schedule-grants-pagination .pagination-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.schedule-grants-pagination .pagination-btn.active {
+    background: var(--perm-accent);
+    border-color: var(--perm-accent);
+    color: #fff;
+}
+
+.schedule-grants-pagination .pagination-dots {
+    color: var(--perm-muted);
+    padding: 0 0.2rem;
+    font-weight: 700;
+}
+
+@media (max-width: 860px) {
+    .perm-sticky-bar {
+        grid-template-columns: 1fr;
+        position: static;
+    }
+
+    .permissions-page .tabs-list {
+        display: flex;
+    }
+}
